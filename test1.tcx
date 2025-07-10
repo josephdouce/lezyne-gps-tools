@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd">
+  <Folders>
+    <Courses>
+      <CourseFolder Name="Courses">
+        <CourseNameRef>
+          <Id>Debug-Lyzene</Id>
+        </CourseNameRef>
+      </CourseFolder>
+    </Courses>
+  </Folders>
+  <Courses>
+    <Course>
+      <Name>Debug-Lyzene</Name>
+      <Track>
+        <Trackpoint>
+          <Time>2025-07-09T09:58:31Z</Time>
+          <Position>
+            <LatitudeDegrees>51.49863</LatitudeDegrees>
+            <LongitudeDegrees>-0.1318</LongitudeDegrees>
+          </Position>
+          <AltitudeMeters>18.2</AltitudeMeters>
+          <DistanceMeters>2.3</DistanceMeters>
+        </Trackpoint>
+        <Trackpoint>
+          <Time>2025-07-09T09:59:21Z</Time>
+          <Position>
+            <LatitudeDegrees>51.65824</LatitudeDegrees>
+            <LongitudeDegrees>-0.15169</LongitudeDegrees>
+          </Position>
+          <AltitudeMeters>16.8</AltitudeMeters>
+          <DistanceMeters>150.1</DistanceMeters>
+        </Trackpoint>
+      </Track>
+      <CoursePoint>
+        <Name>Start of r</Name>
+        <Time>2025-07-09T09:58:21Z</Time>
+        <Position>
+            <LatitudeDegrees>51.49863</LatitudeDegrees>
+            <LongitudeDegrees>-0.1318</LongitudeDegrees>
+        </Position>
+        <PointType>Generic</PointType>
+        <Notes>Start of route</Notes>
+      </CoursePoint>
+      <CoursePoint>
+        <Name>End of rou</Name>
+        <Time>2025-07-09T09:59:21Z</Time>
+        <Position>
+            <LatitudeDegrees>51.65824</LatitudeDegrees>
+            <LongitudeDegrees>-0.15169</LongitudeDegrees>
+        </Position>
+        <PointType>Generic</PointType>
+        <Notes>End of route</Notes>
+      </CoursePoint>
+    </Course>
+  </Courses>
+</TrainingCenterDatabase>
