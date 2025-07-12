@@ -3,12 +3,15 @@ import struct
 import codecs
 
 # Load the binary file
-file_path = Path("./test.lzr")
+file_path = Path("./test1.lzr")
 data = file_path.read_bytes()
 
 # Constants
 record_length = 4 + 4 + 4  # lon(4) + lat(4) + unknown(4)
-entries = []
+coursepoints = []
+trackpoints = []
+
+scale = 1.19304653471
 
 typecodes = [{'Value':1,'Name':'Start'},
 {'Value':8,'Name':'Continue'},
@@ -39,11 +42,23 @@ def slashescape(err):
 
 codecs.register_error('slashescape', slashescape)
 
+def ones_to_twos(val):
+    return -(~val & 0xFF) if val >= 128 else val
+
+def twos_comp_to_sign_mag(value, bits=8):
+    sign_bit = 1 << (bits - 1)
+    sign = value & sign_bit
+    mask = sign_bit - 1
+    if sign:
+        value = -(value & mask)
+    return (sign_bit & value) | (value & mask)
+
 def lezyneHexToLatLon(hex):
     _b = hex
     _signedNumber = round(int.from_bytes(_b, byteorder='little', signed=True)/10000000/1.19304653471,5)
     return _signedNumber
 
+#decode the course points
 i = 0
 while i < len(data) - record_length:
     try:
@@ -61,19 +76,19 @@ while i < len(data) - record_length:
         # Scan for ASCII string right after the 12-byte block
         ascii_phrase = []
         j = i + 12
-        while j < len(data) and 32 <= data[j] <= 122 and 50 <= lat <= 60 and -5 <= lon <= 0:
+        while j < len(data) and 32 <= data[j] <= 127 and lat > 50:
             ascii_phrase.append(chr(data[j]))
             j += 1
         phrase = ''.join(ascii_phrase)
 
         # Only consider as valid if there's a non-empty phrase
         if len(phrase) > 4:
-            entries.append({
+            coursepoints.append({
                 "Latitude": round(lat, 6),
                 "Longitude": round(lon, 6),
                 "Type": next((item for item in typecodes if item.get("Name") and item["Value"] == unknown_byte3), None)['Name'],
                 "Phrase": phrase,
-                "End": i
+                "First Byte": i
             })
             i = j  # Move past the ASCII string
         else:
@@ -81,21 +96,26 @@ while i < len(data) - record_length:
     except Exception:
         i += 1  # Skip malformed record
 
-for item in entries:
-    print(item)# Show first 5 entries for review
+for item in coursepoints:
+    print(item)
+    
+print(len(coursepoints))
 
-i=6
-start_lon = lezyneHexToLatLon(data[0:4])
-start_lat = lezyneHexToLatLon(data[4:8])
-new_lon = start_lon
-new_lat = start_lat
-print("startLonLat:",start_lon, start_lat)
-while i < 124:
-    offset_lon = -int.from_bytes(data[i:i+1], byteorder='little', signed=True)
-    offset_lat = -int.from_bytes(data[i+1:i+2], byteorder='little', signed=True)
-    new_lon = start_lon  + offset_lon
-    new_lat = start_lat  + offset_lat
-    #print("newLonLat:",round(new_lon,4),round(new_lat,4),"lonLatOffset:",offset_lon,offset_lat)
-    print(f'{offset_lon:.8f}',f'{offset_lat:.8f}') 
+#decode the trackpoints
+#this is not working
+i=8
+new_lon = lezyneHexToLatLon(data[0:4])
+new_lat = lezyneHexToLatLon(data[4:8])
+print("startLatLon:", new_lat,new_lon)
+while i < coursepoints[0]['First Byte']-2:
+    offset_lon = int.from_bytes(data[i:i+1], byteorder='little', signed=False)/255*360
+    offset_lat = int.from_bytes(data[i+1:i+2], byteorder='little', signed=False)/255*360
+    print(round(offset_lon,2),round(offset_lat,2))
+    trackpoints.append({"newLat":round(new_lat,4),"newLon":round(new_lon,4),"lonOffset":offset_lon,"latOffset": offset_lat})
     i += 2
+
+print(len(trackpoints))
+for item in trackpoints:
+    print(item)
+    
     
