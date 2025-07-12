@@ -1,2 +1,2 @@
 # Lezyne GPS Tools
- Attempt to reverse engineer lezyne protocols
+ Attempt to reverse engineer lzr file.
