@@ -1,22 +1,28 @@
 import struct
 import xml.etree.ElementTree as ET
 
+# Scaling constant used in Lezyne lat/lon encoding
 latLngScale = 1.1930464
+
+# CRC16 lookup table used for final checksum
 CRC_TABLE = [
-  0x0000, 0xCC01, 0xD801, 0x1400,
-  0xF001, 0x3C00, 0x2800, 0xE401,
-  0xA001, 0x6C00, 0x7800, 0xB401,
-  0x5000, 0x9C01, 0x8801, 0x4400
+    0x0000, 0xCC01, 0xD801, 0x1400,
+    0xF001, 0x3C00, 0x2800, 0xE401,
+    0xA001, 0x6C00, 0x7800, 0xB401,
+    0x5000, 0x9C01, 0x8801, 0x4400
 ]
 
-typecodes = [{"Value":i,"Name":n} for i,n in enumerate([
-  'None','Start','StartRight','StartLeft','Destination','DestinationRight','DestinationLeft',
-  'Becomes','Continue','SlightRight','Right','SharpRight','UturnRight','UturnLeft',
-  'SharpLeft','Left','SlightLeft','RampStraight','RampRight','RampLeft','ExitRight',
-  'ExitLeft','StayStraight','StayRight','StayLeft','Merge','RoundaboutEnter',
-  'RoundaboutExit','FerryEnter','FerryExit','FullMap','LinkRoute'])] + [{"Value":50,"Name":"Generic"}]
+# Lezyne coursepoint type codes
+typecodes = [{"Value": i, "Name": n} for i, n in enumerate([
+    'None', 'Start', 'StartRight', 'StartLeft', 'Destination', 'DestinationRight', 'DestinationLeft',
+    'Becomes', 'Continue', 'SlightRight', 'Right', 'SharpRight', 'UturnRight', 'UturnLeft',
+    'SharpLeft', 'Left', 'SlightLeft', 'RampStraight', 'RampRight', 'RampLeft', 'ExitRight',
+    'ExitLeft', 'StayStraight', 'StayRight', 'StayLeft', 'Merge', 'RoundaboutEnter',
+    'RoundaboutExit', 'FerryEnter', 'FerryExit', 'FullMap', 'LinkRoute'
+])] + [{"Value": 50, "Name": "Generic"}]
 
-def zigzag_encode(n): return (n << 1) ^ (n >> 31)
+def zigzag_encode(n):
+    return (n << 1) ^ (n >> 31)
 
 def write_varint(value):
     out = bytearray()
@@ -30,9 +36,9 @@ def write_varint(value):
             break
     return out
 
-def lezyneLatLonToHex(lat):
-    _n = int(float(lat)*10000000*latLngScale)
-    return _n.to_bytes(4, byteorder='little', signed=True)
+def lezyneLatLonToHex(val):
+    scaled = int(float(val) * 10000000 * latLngScale)
+    return scaled.to_bytes(4, byteorder='little', signed=True)
 
 def get_crc16(data: bytes) -> int:
     crc = 0
@@ -82,27 +88,39 @@ def parse_tcx(xml_str):
 def convert_file(input_bytes):
     xml = input_bytes.decode("utf-8")
     trackpoints, coursepoints = parse_tcx(xml)
+
+    print(f"Parsed {len(trackpoints)} trackpoints and {len(coursepoints)} coursepoints")
+
     polyline = encode_trackpoints(trackpoints)
+
     byteArray = []
-    byteArray.append(lezyneLatLonToHex(trackpoints[0][1]))
-    byteArray.append(lezyneLatLonToHex(trackpoints[0][0]))
-    byteArray.append(b"H")
-    byteArray.append((1).to_bytes(1,'little'))
+    byteArray.append(lezyneLatLonToHex(trackpoints[0][1]))  # Lon
+    byteArray.append(lezyneLatLonToHex(trackpoints[0][0]))  # Lat
+    byteArray.append(b"H")  # DeviceId
+    byteArray.append((1).to_bytes(1,'little'))  # Version?
     byteArray.append(len(polyline).to_bytes(2,'little'))
     byteArray.append(len(coursepoints).to_bytes(2,'little'))
-    byteArray.append((0).to_bytes(1,'little'))
+    byteArray.append((0).to_bytes(1,'little'))  # Reserved
     byteArray.append(polyline)
-    i = 1
-    for name, lat, lon, pointType, notes in coursepoints:
+
+    for i, (name, lat, lon, pointType, notes) in enumerate(coursepoints, 1):
+        typeval = next((t["Value"] for t in typecodes if t["Name"] == pointType), 50)
+
+        print(f"Coursepoint #351:")
+        print(f"  Name     : {name}")
+        print(f"  Notes    : {notes} (trimmed: '{notes}')")
+        print(f"  Lat/Lon  : {lat}, {lon}")
+        print(f"  Type     : {pointType} => code {typeval}")
+
         byteArray.append(lezyneLatLonToHex(lon))
         byteArray.append(lezyneLatLonToHex(lat))
         byteArray.append((i).to_bytes(2, 'little'))
-        i += 1
-        typeval = next((t["Value"] for t in typecodes if t["Name"] == pointType), 50)
         byteArray.append((typeval).to_bytes(1, 'little'))
         byteArray.append((len(notes)).to_bytes(1, 'little'))
         byteArray.append(notes.encode("utf-8"))
+
     data = b''.join(byteArray)
-    data += len(data).to_bytes(2, 'little')
-    data += get_crc16(data).to_bytes(2, 'little')
+    data += len(data).to_bytes(2, 'little')  # Total length
+    data += get_crc16(data).to_bytes(2, 'little')  # CRC
+
     return data
