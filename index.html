@@ -3,15 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <title>TCX to LZR Converter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>TCX to LZR Converter</h1>
-  <input id="file-input" type="file" accept=".tcx" />
-  <button id="convert-btn" disabled>Convert</button>
-  <p id="status">Loading Pyodide...</p>
+  <div class="container">
+    <h1>TCX to LZR Converter</h1>
+    <label for="file-input" class="custom-file-upload">Choose TCX File</label><br>
+    <input id="file-input" type="file" accept=".tcx" /><br>
+    <button id="convert-btn" disabled>Convert</button>
+    <p id="status">Loading Pyodide...</p>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
-
   <script>
     let pyodide;
 
@@ -24,7 +28,7 @@
     (async () => {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(["micropip"]);
-      await loadPythonScriptFromFile("tcx2lzr.py"); // Load external Python file
+      await loadPythonScriptFromFile("tcx2lzr.py");
       document.getElementById("status").textContent = "Ready";
       document.getElementById("convert-btn").disabled = false;
     })();
