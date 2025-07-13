@@ -12,7 +12,7 @@ import struct
 import codecs
 import xml.etree.ElementTree as ET
 import os
-filePath = 'test3.tcx'
+filePath = 'test1.tcx'
 latLngScale = 1.1930464
 byteArray = []
 CRC_TABLE = [
