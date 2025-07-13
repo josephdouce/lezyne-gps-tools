@@ -24,7 +24,7 @@
     (async () => {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(["micropip"]);
-      await loadPythonScriptFromFile("tcx_bytes_to_lzr.py"); // Load external Python file
+      await loadPythonScriptFromFile("tcx2lzr.py"); // Load external Python file
       document.getElementById("status").textContent = "Ready";
       document.getElementById("convert-btn").disabled = false;
     })();
