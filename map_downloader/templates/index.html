@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   <style>
     body { margin: 0; font-family: sans-serif; }
     #map { height: 60vh; width: 100%; }
@@ -23,6 +24,8 @@
   </style>
 </head>
 <body>
+  
+
 
 <h2>Select Area and Download Map Tiles</h2>
 <div id="map"></div>
@@ -94,24 +97,6 @@ map.on('draw:created', function (e) {
   document.getElementById('tileCount').innerText = tileCount;
 });
 
-function addDownloadedTiles(map) {
-  downloadedTileLayerGroup.clearLayers();
-  fetch('/downloaded_tiles')
-    .then(res => res.json())
-    .then(data => {
-      data.tiles.forEach(tile => {
-        const bounds = [[tile.sw.lat, tile.sw.lon], [tile.ne.lat, tile.ne.lon]];
-        L.rectangle(bounds, {
-          color: "green",
-          weight: 1,
-          fillOpacity: 0.2
-        }).addTo(downloadedTileLayerGroup);
-      });
-    })
-    .catch(err => console.error('Failed to load downloaded tiles:', err));
-}
-
-addDownloadedTiles(map);
 </script>
 
 <hr>
@@ -154,7 +139,7 @@ document.getElementById("downloadForm").addEventListener("submit", function(e) {
       const eventSource = new EventSource("/progress");
       eventSource.onmessage = function(e) {
         document.getElementById("progressStatus").innerText = "Progress: " + e.data;
-        if (e.data.startsWith("data:") || e.data.endsWith("/")) return;
+        if (done === 0) return;
         const [done, total] = e.data.split("/");
         if (done === total) {
           eventSource.close();
