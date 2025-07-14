@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Map Area Downloader (10km Grid + Geolocation)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 90vh; }
+    button { margin: 10px; padding: 10px; }
+  </style>
+</head>
+<body>
+
+<h2>Select an area to download map files</h2>
+<div id="map"></div>
+<button id="showTiles">Show 10km Tiles</button>
+<button id="download">Download Map Files</button>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let map = L.map('map');
+let bounds;
+let rectangle;
+let isDrawing = false;
+let tileBoxes = [];
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+}).addTo(map);
+
+// 1. Default to user location with 50km square
+navigator.geolocation.getCurrentPosition(pos => {
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+
+  // Approx. 25km in each direction
+  const latOffset = 25 / 110.574;
+  const lngOffset = 25 / (111.320 * Math.cos(lat * Math.PI / 180));
+
+  const sw = [lat - latOffset, lng - lngOffset];
+  const ne = [lat + latOffset, lng + lngOffset];
+
+  bounds = L.latLngBounds(sw, ne);
+  rectangle = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
+  map.fitBounds(bounds);
+}, () => {
+  // Fallback if location access is denied
+  map.setView([0, 0], 2);
+});
+
+// Drawing a new area manually
+map.on('mousedown', function (e) {
+  if (rectangle) map.removeLayer(rectangle);
+  tileBoxes.forEach(b => map.removeLayer(b));
+  tileBoxes = [];
+
+  bounds = [e.latlng, e.latlng];
+  rectangle = L.rectangle(bounds, {color: "blue", weight: 1}).addTo(map);
+  isDrawing = true;
+});
+
+map.on('mousemove', function (e) {
+  if (!isDrawing || !rectangle) return;
+  rectangle.setBounds([bounds[0], e.latlng]);
+});
+
+map.on('mouseup', function () {
+  if (rectangle) {
+    bounds = rectangle.getBounds();
+    isDrawing = false;
+  }
+});
+
+function latKmToDeg(km) {
+  return km / 110.574;
+}
+
+function lngKmToDeg(km, lat) {
+  return km / (111.320 * Math.cos(lat * Math.PI / 180));
+}
+
+function getTileGrid(sw, ne, kmStep = 10) {
+  const latStep = latKmToDeg(kmStep);
+  const lngStep = lngKmToDeg(kmStep, (ne.lat + sw.lat) / 2);
+  const tiles = [];
+
+  for (let lat = sw.lat; lat < ne.lat; lat += latStep) {
+    for (let lng = sw.lng; lng < ne.lng; lng += lngStep) {
+      const tileSW = {
+        lat: Math.floor(lat * 100) / 100,
+        lng: Math.floor(lng * 100) / 100
+      };
+      const tileNE = {
+        lat: Math.ceil((lat + latStep) * 100) / 100,
+        lng: Math.ceil((lng + lngStep) * 100) / 100
+      };
+      tiles.push({ sw: tileSW, ne: tileNE });
+    }
+  }
+  return tiles;
+}
+
+document.getElementById('showTiles').onclick = function () {
+  if (!bounds) return alert("Please select an area first.");
+  tileBoxes.forEach(b => map.removeLayer(b));
+  tileBoxes = [];
+
+  const tiles = getTileGrid(bounds.getSouthWest(), bounds.getNorthEast(), 10);
+  tiles.forEach(t => {
+    const box = L.rectangle([[t.sw.lat, t.sw.lng], [t.ne.lat, t.ne.lng]], {
+      color: "orange", weight: 1
+    }).addTo(map);
+    tileBoxes.push(box);
+  });
+};
+
+document.getElementById('download').onclick = async function () {
+  if (!bounds) return alert("Please select an area first.");
+  const tiles = getTileGrid(bounds.getSouthWest(), bounds.getNorthEast(), 10);
+
+  for (let t of tiles) {
+    const body = JSON.stringify({
+      sw_gps_lat: t.sw.lat.toFixed(2),
+      sw_gps_lon: t.sw.lng.toFixed(2),
+      ne_gps_lat: t.ne.lat.toFixed(2),
+      ne_gps_lon: t.ne.lng.toFixed(2)
+    });
+
+    try {
+      const response = await fetch('https://corsproxy.io/?https://www.gpsroot.com/generate_lzm/get/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+      });
+
+      const result = await response.json();
+
+      if (result.APIResultMessage === "Success") {
+        console.log("✅ Success:", result.mf_url);
+        const link = document.createElement('a');
+        link.href = result.mf_url;
+        link.download = result.mf_url.split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        const greenBox = L.rectangle(
+          [[t.sw.lat, t.sw.lng], [t.ne.lat, t.ne.lng]],
+          {color: "green", weight: 1}
+        ).addTo(map);
+        tileBoxes.push(greenBox);
+      } else {
+        console.warn("❌ API error:", result);
+      }
+    } catch (err) {
+      console.error("❌ Fetch error:", err);
+    }
+  }
+};
+</script>
+
+</body>
+</html>

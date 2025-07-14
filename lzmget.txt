@@ -1,0 +1,72 @@
+    startButton.onclick = (e)=>{
+        calculateCornerCoordinates();
+        if (pickSmallerWarning.style.display !== "block" && downloadAreaOverlay.style.display === "block"){
+            confirmation(getText("langdiv_generating_map"),getText("langdiv_wait_gen_explain"),()=>{
+
+                isDownloading = true;
+                disableMapInteraction();
+                startButton.src = "../Icon/Loading.gif";
+
+                downloadAreaOverlay.style.display = "none";
+                startButton.cursor = "progress";
+                mapWaitOverlay.style.display = "block";
+
+
+                northEast.lat = (Math.ceil(northEast.lat * 100) / 100).toFixed(2);
+                northEast.lng = (Math.ceil(northEast.lng * 100) / 100).toFixed(2);
+                southWest.lat = (Math.floor(southWest.lat * 100) / 100).toFixed(2);
+                southWest.lng = (Math.floor(southWest.lng * 100) / 100).toFixed(2);
+
+                const body = JSON.stringify({
+                    sw_gps_lat:southWest.lat,
+                    sw_gps_lon:southWest.lng,
+                    ne_gps_lat:northEast.lat,
+                    ne_gps_lon:northEast.lng
+                });
+
+                fetch(`/generate_lzm/get/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: body
+                })
+                .then(function (response) {
+                    return response.json();
+                })
+                .then(function (result) {
+
+                    if (result.APIResultMessage === "Success"){
+                        showDownloadState(result.mf_url);
+                    } else {
+                        mapWaitOverlay.style.display = "none";
+                        console.log('Request failed', error);
+                        startButton.src = "../Icon/Offline_maps_start_Icon.png";
+                        downloadNowMapOverlay.style.display = "none";
+                        downloadButtonLabel.style.display = "none";
+                        enableMapInteraction();
+                        isDownloading = false;
+                        map.setZoom(map.getZoom()-1);
+                        downloadAreaOverlay.style.display = "block";
+                        showSnackbar(getText("langdiv_some_error"));
+                    }
+                })
+                .catch (function (error) {
+                    console.log('Request failed', error);
+                    mapWaitOverlay.style.display = "none";
+                    startButton.src = "../Icon/Offline_maps_start_Icon.png";
+                    downloadNowMapOverlay.style.display = "none";
+                    downloadButtonLabel.style.display = "none";
+                    enableMapInteraction();
+                    isDownloading = false;
+                    map.setZoom(map.getZoom()-1);
+                    downloadAreaOverlay.style.display = "block";
+                    showSnackbar(getText("langdiv_some_error"));
+                });
+
+            })
+        } else {
+            //error message
+
+        }
+    }

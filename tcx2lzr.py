@@ -1,3 +1,43 @@
+"""
+Lezyne .lzr Route File Format (Custom Reverse-Engineered Structure)
+
+STRUCTURE OVERVIEW:
+──────────────────────────────────────────────────────────────────────────────
+| Offset | Length | Field                          | Notes                    |
+|--------|--------|---------------------------------|-------------------------|
+| 0x00   | 4      | Destination Longitude (int32)   | Lezyne scaled coord     |
+| 0x04   | 4      | Destination Latitude (int32)    | Lezyne scaled coord     |
+| 0x08   | 1      | Device ID                       | Static, usually "H"     |
+| 0x09   | 1      | Route Trimmed Flag              | 1 = yes, 0 = no         |
+| 0x0A   | 2      | Encoded Polyline Length (uint16)| Bytes following         |
+| 0x0C   | 2      | CoursePoint Count (uint16)      | Number of points        |
+| 0x0E   | 1      | Re-Route Flag                   | 1 = reroute section     |
+| ...    | var    | Encoded Polyline                | Binary polyline data    |
+| ...    | var    | CoursePoints                    | See below               |
+| ...    | 2      | Total File Length (uint16)      | Excludes CRC            |
+| ...    | 2      | CRC-16                          | Lezyne-specific         |
+
+OPTIONAL RE-ROUTE SECTION (Only if Re-Route Flag == 1):
+──────────────────────────────────────────────────────────────────────────────
+| Field                         | Length | Type   | Notes                       |
+|------------------------------|--------|--------|------------------------------|
+| Static Identifier Text       | 7      | bytes  | b"route  "                   |
+| Distance After Trim          | 4      | int32  | Units unknown (placeholder)  |
+| Linked Route Polyline Count  | 2      | uint16 | Placeholder for segment count|
+
+COURSEPOINT STRUCTURE (Repeated N times):
+──────────────────────────────────────────────────────────────────────────────
+| Field               | Length | Type     | Notes                             |
+|---------------------|--------|----------|-----------------------------------|
+| Longitude           | 4      | int32    | Lezyne scaled                     |
+| Latitude            | 4      | int32    | Lezyne scaled                     |
+| Polyline Index      | 2      | uint16   | Ordinal number of point           |
+| Type                | 1      | uint8    | Based on predefined typecodes     |
+| Name Length         | 1      | uint8    | Length of Notes string (max 16)   |
+| Name/Notes Text     | var    | bytes    | UTF-8 encoded Notes string        |
+
+"""
+
 import struct
 import xml.etree.ElementTree as ET
 from io import BytesIO
