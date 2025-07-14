@@ -1,13 +1,12 @@
-import math
-import requests
 import os
+import requests
+
+LAT_STEP = 0.1
+LON_STEP = 0.2
+OVERLAP = 0.01
 
 def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
     print(f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
-
-    lat_step = 0.1
-    lon_step = 0.2
-    overlap = 0.01
 
     tiles = []
     lat = sw_lat
@@ -16,20 +15,23 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
         while lon < ne_lon:
             tile_sw = {'lat': round(lat, 6), 'lon': round(lon, 6)}
             tile_ne = {
-                'lat': round(lat + lat_step + overlap, 6),
-                'lon': round(lon + lon_step + overlap, 6)
+                'lat': round(lat + LAT_STEP + OVERLAP, 6),
+                'lon': round(lon + LON_STEP + OVERLAP, 6)
             }
 
-            # Only include if tile intersects selection
-            if not (tile_ne['lat'] <= sw_lat or tile_sw['lat'] >= ne_lat or
-                    tile_ne['lon'] <= sw_lon or tile_sw['lon'] >= ne_lon):
+            if not (
+                tile_ne['lat'] <= sw_lat or tile_sw['lat'] >= ne_lat or
+                tile_ne['lon'] <= sw_lon or tile_sw['lon'] >= ne_lon
+            ):
                 tiles.append((tile_sw, tile_ne))
                 print(f"Tile SW: {tile_sw}, NE: {tile_ne}")
-            lon += lon_step
-        lat += lat_step
+
+            lon += LON_STEP
+        lat += LAT_STEP
 
     print(f"Total tiles generated: {len(tiles)}")
     return tiles
+
 
 def request_tile(sw, ne):
     url = "https://www.gpsroot.com/generate_lzm/get/"
@@ -50,16 +52,17 @@ def request_tile(sw, ne):
             return data.get("mf_url")
         else:
             print("❌ API failed:", data)
-    except Exception as e:
-        print(f"❌ Error fetching tile {sw} to {ne}:", e)
+    except Exception as error:
+        print(f"❌ Error fetching tile {sw} to {ne}:", error)
     return None
+
 
 def download_file(url, dest_folder):
     local_filename = url.split("/")[-1]
     dest_path = os.path.join(dest_folder, local_filename)
     print(f"⬇️ Downloading {url} to {dest_path}")
-    r = requests.get(url, stream=True)
-    with open(dest_path, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=8192):
+    response = requests.get(url, stream=True)
+    with open(dest_path, 'wb') as file:
+        for chunk in response.iter_content(chunk_size=8192):
             if chunk:
-                f.write(chunk)
+                file.write(chunk)

@@ -32,7 +32,7 @@ COURSEPOINT STRUCTURE (Repeated N times):
 | Longitude           | 4      | int32    | Lezyne scaled                     |
 | Latitude            | 4      | int32    | Lezyne scaled                     |
 | Polyline Index      | 2      | uint16   | Ordinal number of point           |
-| Type                | 1      | uint8    | Based on predefined typecodes     |
+| Type                | 1      | uint8    | Based on predefined TYPE_CODES     |
 | Name Length         | 1      | uint8    | Length of Notes string (max 16)   |
 | Name/Notes Text     | var    | bytes    | UTF-8 encoded Notes string        |
 
@@ -43,7 +43,7 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 
 # Coordinate scaling constant specific to Lezyne format
-latLngScale = 1.1930464
+LAT_LNG_SCALE = 1.1930464
 
 # CRC-16 lookup table
 CRC_TABLE = [
@@ -54,13 +54,28 @@ CRC_TABLE = [
 ]
 
 # Mapping of coursepoint types to numeric codes
-typecodes = {
+TYPE_CODES = {
     'None': 0, 'Start': 1, 'StartRight': 2, 'StartLeft': 3, 'Destination': 4, 'DestinationRight': 5, 'DestinationLeft': 6,
     'Becomes': 7, 'Continue': 8, 'SlightRight': 9, 'Right': 10, 'SharpRight': 11, 'UturnRight': 12, 'UturnLeft': 13,
     'SharpLeft': 14, 'Left': 15, 'SlightLeft': 16, 'RampStraight': 17, 'RampRight': 18, 'RampLeft': 19, 'ExitRight': 20,
     'ExitLeft': 21, 'StayStraight': 22, 'StayRight': 23, 'StayLeft': 24, 'Merge': 25, 'RoundaboutEnter': 26,
     'RoundaboutExit': 27, 'FerryEnter': 28, 'FerryExit': 29, 'FullMap': 30, 'LinkRoute': 31, 'Generic': 50
 }
+
+# GPS route providers
+ROUTE_PROVIDERS = [
+    ('gpsRoot_providerA', 1, 'A'),
+    ('gpsRoot_providerB', 2, 'B'),
+    ('gpsRoot_providerC', 3, 'C'),
+    ('gpsRoot_providerD', 4, 'D'),
+    ('MountainBike', 5, 'E'),
+    ('RoadBike', 6, 'F'),
+    ('EazyRide', 7, 'G'),
+    ('Shortest', 8, 'H'),
+    ('Hiking', 9, 'I'),
+    ('Commuter', 10, 'J'),
+    ('Custom', 11, 'K')
+]
 
 def zigzag_encode(n):
     return (n << 1) ^ (n >> 31)
@@ -80,14 +95,14 @@ def write_varint(value):
 
 def lezyne_lat_lon_to_bytes(coord):
     # Convert latitude or longitude to 4-byte Lezyne-specific scaled format
-    scaled = int(coord * 1e7 * latLngScale)
+    scaled = int(coord * 1e7 * LAT_LNG_SCALE)
     return scaled.to_bytes(4, byteorder="little", signed=True)
 
-def extract_trackpoints(xml):
+def extract_trackpoints_coursepoints(xml):
     # Parse and extract all GPS trackpoints from TCX
     root = ET.fromstring(xml)
     ns = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
-    points = []
+    trackpoints = []
 
     for tp in root.findall(".//ns:Trackpoint", ns):
         lat = tp.find("ns:Position/ns:LatitudeDegrees", ns)  # Find latitude element
@@ -96,23 +111,23 @@ def extract_trackpoints(xml):
         if lat is not None and lon is not None:
             lat_val = float(lat.text)
             lon_val = float(lon.text)
-            points.append((lat_val, lon_val))  # Add tuple (lat, lon) to list
+            trackpoints.append((lat_val, lon_val))  # Add tuple (lat, lon) to list
+            print(f"[Trackpoint] Lat: {lat.text}, Lon: {lon.text}")
 
-    print(f"[Trackpoint] Total: {len(points)} trackpoints extracted.")  # Summary
-    return points
-
-def extract_coursepoints(xml):
+    print(f"[Trackpoint] Total: {len(trackpoints)} trackpoints extracted.")  # Summary
+    
     # Parse and extract coursepoints (turn instructions, waypoints, etc.)
-    root = ET.fromstring(xml)
-    ns = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
-    points = []
+    coursepoints = []
 
+    last_trackpoint = 0
     for cp in root.findall(".//ns:CoursePoint", ns):
         name = cp.find("ns:Name", ns)
         lat = cp.find("ns:Position/ns:LatitudeDegrees", ns)
         lon = cp.find("ns:Position/ns:LongitudeDegrees", ns)
         typ = cp.find("ns:PointType", ns)
         notes = cp.find("ns:Notes", ns)
+        trackpoint = trackpoints[last_trackpoint:].index((float(lat.text),float(lon.text)))+1+last_trackpoint or 0
+        last_trackpoint = trackpoint
 
         # Use empty string if the tag is missing or the text is None
         name_text = name.text.strip() if name is not None and name.text else ""
@@ -125,11 +140,13 @@ def extract_coursepoints(xml):
                 float(lat.text),
                 float(lon.text),
                 typ_text,
-                notes_text
-            )
-            points.append(point_data)
+                notes_text,
+                trackpoint
 
-    return points
+            )
+            coursepoints.append(point_data)
+
+    return trackpoints, coursepoints
 
 def encode_polyline(points):
     # Encode trackpoints as compressed polyline (protobuf-style)
@@ -167,8 +184,7 @@ def get_crc16(data: bytes) -> int:
 def convert_file(input_bytes):
     # Decode and parse the input TCX XML, then convert to .lzr format
     xml = bytes(input_bytes).decode("utf-8")
-    trackpoints = extract_trackpoints(xml)
-    coursepoints = extract_coursepoints(xml)
+    trackpoints, coursepoints = extract_trackpoints_coursepoints(xml)
     polyline = encode_polyline(trackpoints) # Encode trackpoints 
     byte_array = bytearray()
     
@@ -181,9 +197,9 @@ def convert_file(input_bytes):
     print(f"[Header] Destination Latitude: {trackpoints[0][0]}")
     byte_array += dest_lat_bytes  # Add destination latitude
 
-    device_id = b"H"  # Static device identifier
-    print(f"[Header] Device ID: {device_id.decode()}")
-    byte_array += device_id  # Add device ID
+    route_provider = ROUTE_PROVIDERS[5][3]  # Route provider
+    print(f"[Header] Device ID: {route_provider.decode()}")
+    byte_array += route_provider  # Route provider
 
     trimmed_flag = (1).to_bytes(1, 'little')  # Route trimmed flag (1 = yes)
     print(f"[Header] Trimmed Route Flag: 1")
@@ -205,17 +221,17 @@ def convert_file(input_bytes):
     byte_array += polyline  # Append encoded polyline data
 
     # Append each coursepoint as a structured binary block
-    for i, (name, lat, lon, typ, notes) in enumerate(coursepoints, start=1):
+    for (name, lat, lon, typ, notes, trackpoint) in coursepoints:
         byte_array += lezyne_lat_lon_to_bytes(lon) # Coursepoint longitude
         byte_array += lezyne_lat_lon_to_bytes(lat) # Coursepoint latitude
-        byte_array += i.to_bytes(2, 'little')  # Coursepoint index
-        byte_array += typecodes.get(typ, 0).to_bytes(1, 'little')  # Turn type
+        byte_array += int(trackpoint).to_bytes(2, 'little')  # Coursepoint index
+        byte_array += TYPE_CODES.get(typ, 0).to_bytes(1, 'little')  # Turn type
         notes_bytes = bytes(notes, "utf-8")
         notes_len = len(notes_bytes)
         byte_array += notes_len.to_bytes(1, 'little')  # Length of notes
         byte_array += notes_bytes  # Notes (used as label)
         print(f"[Coursepoint] Name: {name}, Lat: {lat}, Lon: {lon}, "
-                  f"Type: {typ}, Notes: {notes} ({notes_len})")
+                  f"Type: {typ}, Notes: {notes} Trackpoint: {trackpoint} Length: {notes_len}")
 
     # Compute CRC and total file length
     data_for_crc = byte_array[:]
