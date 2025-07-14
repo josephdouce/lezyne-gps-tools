@@ -60,3 +60,6 @@ def download_zip():
     global zip_bytes
     return send_file(zip_bytes, mimetype='application/zip',
                      as_attachment=True, download_name='downloaded_tiles.zip')
+
+if __name__ == '__main__':
+    app.run(debug=True)

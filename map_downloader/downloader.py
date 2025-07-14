@@ -9,23 +9,18 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
     lon_step = 0.2
     overlap = 0.01
 
-    lat_start = math.floor(sw_lat / lat_step) * lat_step
-    lat_end = math.ceil(ne_lat / lat_step) * lat_step
-    lon_start = math.floor(sw_lon / lon_step) * lon_step
-    lon_end = math.ceil(ne_lon / lon_step) * lon_step
-
     tiles = []
-    lat = lat_start
-    while lat < lat_end:
-        lon = lon_start
-        while lon < lon_end:
+    lat = sw_lat
+    while lat < ne_lat:
+        lon = sw_lon
+        while lon < ne_lon:
             tile_sw = {'lat': round(lat, 6), 'lon': round(lon, 6)}
             tile_ne = {
                 'lat': round(lat + lat_step + overlap, 6),
                 'lon': round(lon + lon_step + overlap, 6)
             }
 
-            # Only include if tile intersects selected area
+            # Only include if tile intersects selection
             if not (tile_ne['lat'] <= sw_lat or tile_sw['lat'] >= ne_lat or
                     tile_ne['lon'] <= sw_lon or tile_sw['lon'] >= ne_lon):
                 tiles.append((tile_sw, tile_ne))
