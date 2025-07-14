@@ -1,66 +1,62 @@
-from flask import Flask, render_template, request
-from downloader import generate_tiles, request_tile, download_file
-import os
+
+from flask import Flask, render_template, request, send_file, Response
+from downloader import generate_tiles, request_tile
+from io import BytesIO
+import zipfile
+import requests
+import threading
+import time
 
 app = Flask(__name__)
-SAVE_DIR = "mapfiles"
+progress_data = {"total": 0, "completed": 0}
+zip_bytes = BytesIO()
 
 @app.route('/')
 def index():
-    logs = []
-    if os.path.exists("status.log"):
-        with open("status.log", "r") as f:
-            logs = f.readlines()
-    return render_template("index.html", logs=logs)
+    return render_template("index.html")
 
 @app.route('/download', methods=['POST'])
 def download():
+    def build_zip(sw_lat, sw_lon, ne_lat, ne_lon):
+        global zip_bytes, progress_data
+        zip_bytes = BytesIO()
+        tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
+        progress_data["total"] = len(tiles)
+        progress_data["completed"] = 0
+        with zipfile.ZipFile(zip_bytes, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            for idx, (sw, ne) in enumerate(tiles):
+                url = request_tile(sw, ne)
+                if url:
+                    try:
+                        r = requests.get(url)
+                        if r.status_code == 200:
+                            filename = f"mf_{sw['lat']}_{sw['lon']}_{ne['lat']}_{ne['lon']}.lzm"
+                            zipf.writestr(filename, r.content)
+                    except Exception as e:
+                        print(f"Error downloading {url}: {e}")
+                progress_data["completed"] += 1
+        zip_bytes.seek(0)
+
     sw_lat = float(request.form['sw_lat'])
     sw_lon = float(request.form['sw_lon'])
     ne_lat = float(request.form['ne_lat'])
     ne_lon = float(request.form['ne_lon'])
 
-    tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
-    os.makedirs(SAVE_DIR, exist_ok=True)
+    threading.Thread(target=build_zip, args=(sw_lat, sw_lon, ne_lat, ne_lon)).start()
+    return "started"
 
-    with open("status.log", "w") as log:
-        for idx, (sw, ne) in enumerate(tiles, 1):
-            url = request_tile(sw, ne)
-            status = ""
-            if url:
-                try:
-                    download_file(url, SAVE_DIR)
-                    status = f"Downloaded tile {idx}/{len(tiles)}: {url}"
-                except Exception as e:
-                    status = f"Error downloading tile {idx}/{len(tiles)}: {e}"
-            else:
-                status = f"Failed to retrieve URL for tile {idx}/{len(tiles)}"
-            log.write(status + "\n")
+@app.route('/progress')
+def progress():
+    def event_stream():
+        while True:
+            yield f"data: {progress_data['completed']}/{progress_data['total']}\n\n"
+            if progress_data["completed"] >= progress_data["total"]:
+                break
+            time.sleep(0.5)
+    return Response(event_stream(), mimetype="text/event-stream")
 
-    logs = []
-    if os.path.exists("status.log"):
-        with open("status.log", "r") as f:
-            logs = f.readlines()
-    return render_template("index.html", logs=logs)
-
-@app.route('/downloaded_tiles')
-def downloaded_tiles():
-    import glob
-    tiles = []
-    pattern = os.path.join(SAVE_DIR, "*.lzm")
-    for path in glob.glob(pattern):
-        fname = os.path.basename(path)
-        parts = fname.replace(".lzm", "").replace("mf_", "").split("_")
-        if len(parts) == 4:
-            try:
-                sw_lat, sw_lon, ne_lat, ne_lon = map(float, parts)
-                tiles.append({
-                    "sw": {"lat": sw_lat, "lon": sw_lon},
-                    "ne": {"lat": ne_lat, "lon": ne_lon}
-                })
-            except ValueError:
-                continue
-    return {"tiles": tiles}
-
-if __name__ == '__main__':
-    app.run(debug=True)
+@app.route('/download_zip')
+def download_zip():
+    global zip_bytes
+    return send_file(zip_bytes, mimetype='application/zip',
+                     as_attachment=True, download_name='downloaded_tiles.zip')

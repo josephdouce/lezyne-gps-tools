@@ -36,16 +36,6 @@
   <button type="submit">Download</button>
 </form>
 
-<div id="status-log">
-  {% if logs %}
-    {% for line in logs %}
-      {{ line }}<br>
-    {% endfor %}
-  {% else %}
-    No download started yet.
-  {% endif %}
-</div>
-
 <script>
 const map = L.map('map');
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -153,6 +143,30 @@ document.getElementById('folderPicker').addEventListener('change', function (e) 
   });
 });
 </script>
+
+
+<script>
+document.getElementById("downloadForm").addEventListener("submit", function(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = new FormData(form);
+  fetch("/download", { method: "POST", body: data })
+    .then(() => {
+      const eventSource = new EventSource("/progress");
+      eventSource.onmessage = function(e) {
+        document.getElementById("progressStatus").innerText = "Progress: " + e.data;
+        if (e.data.startsWith("data:") || e.data.endsWith("/")) return;
+        const [done, total] = e.data.split("/");
+        if (done === total) {
+          eventSource.close();
+          document.getElementById("progressStatus").innerText += " ✅ Done. Downloading...";
+          window.location = "/download_zip";
+        }
+      };
+    });
+});
+</script>
+<p id="progressStatus">Progress: 0/0</p>
 
 </body>
 </html>
