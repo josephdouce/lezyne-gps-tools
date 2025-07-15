@@ -10,6 +10,7 @@ h1, h2, h3 {
   text-align: center;
   margin-top: 1em;
   width: 100%;
+  font-size: 1em;
 }
 
 .container {
@@ -24,9 +25,10 @@ h1, h2, h3 {
 }
 
 #map {
-  height: 60vh;
-  width: 100%;
-  margin: 1em 0;
+  display: flex;
+  flex-direction: row;
+  height: 70vh;
+  margin: 10px;
   border-radius: 10px;
   border: 1px solid #ccc;
 }
@@ -87,7 +89,7 @@ button:hover:not(:disabled) {
   justify-content: center;
   align-items: center;          /* horizontally center content */
   text-align: center;           /* center text and inline elements */
-  margin: 0;
+  margin: 10px;
   padding: 1em 2em;
   border-bottom: 1px solid #eee;
   background: white;
@@ -95,9 +97,27 @@ button:hover:not(:disabled) {
   box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
 
+.card {
+  font-size: 1em;
+}
+
 .top-section {
   display: flex;
   flex-direction: row;
-  height: 20vh;
+  height: 25vh;
   width: 100%;
+}
+
+#mapTitle {
+  position: absolute;
+  top: 27vh;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.2em;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }

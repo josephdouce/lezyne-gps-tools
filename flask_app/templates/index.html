@@ -27,7 +27,7 @@
           <input type="hidden" id="sw_lon" name="sw_lon" required />
           <input type="hidden" id="ne_lat" name="ne_lat" required />
           <input type="hidden" id="ne_lon" name="ne_lon" required />
-          <p><strong>Tiles to download:</strong> <span id="tileCount">0</span></p>
+          <h3>Tiles to download</h3><p><span id="tileCount">0</span></p>
           <button id="downloadTilesBtn" type="submit">Download</button>
           <p id="progressStatus">Progress: 0/0</p>
         </form>
@@ -39,7 +39,7 @@
       </div>
     </div>
 
-    <h3>Select Area to Download Map Tiles</h3>
+    <div id="mapTitle">Select Area to Download Map Tiles</div>
     <div id="map"></div>
   </body>
   <script>
@@ -206,7 +206,7 @@
           const [done, total] = e.data.split("/"); // declare first
           const downloadBtn = document.getElementById("downloadTilesBtn");
 
-          if (done === "0") {
+          if (done === "0" || done != total) {
             document.getElementById("progressStatus").innerText += " Downloading...";
             downloadBtn.disabled = true;
             return;
