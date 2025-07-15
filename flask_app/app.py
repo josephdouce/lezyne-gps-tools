@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, send_file, Response
 from downloader import generate_tiles, request_tile
+from flask import Flask, render_template, request, send_file, Response, jsonify
+from tcx2lzr import convert_file
 from io import BytesIO
+import io
 import zipfile
 import requests
 import threading
@@ -15,6 +17,23 @@ zip_bytes = BytesIO()
 def index():
     return render_template("index.html")
 
+
+@app.route('/get_track', methods=['POST'])
+def get_track():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    input_bytes = file.read()
+    _, trackpoints, coursepoints = convert_file(input_bytes)
+
+    return jsonify({
+        "trackpoints": [{"lat": lat, "lon": lon} for lat, lon in trackpoints],
+        "coursepoints": [
+            {"lat": lat, "lon": lon, "label": notes or name}
+            for name, lat, lon, typ, notes, _ in coursepoints
+        ],
+    })
 
 @app.route('/download', methods=['POST'])
 def download():
@@ -77,6 +96,27 @@ def download_zip():
         mimetype='application/zip',
         as_attachment=True,
         download_name='downloaded_tiles.zip'
+    )
+
+
+@app.route('/get_lzr', methods=['POST'])
+def get_lzr():
+    if 'file' not in request.files:
+        return "No file uploaded", 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.tcx'):
+        return "Invalid file type", 400
+
+    input_bytes = file.read()
+    lzr_bytes,_,_ = convert_file(input_bytes)
+
+    # Return the binary file
+    return send_file(
+        io.BytesIO(lzr_bytes),
+        as_attachment=True,
+        download_name=file.filename.replace(".tcx", ".lzr"),
+        mimetype="application/octet-stream"
     )
 
 

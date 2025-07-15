@@ -40,10 +40,12 @@ COURSEPOINT STRUCTURE (Repeated N times):
 
 import struct
 import xml.etree.ElementTree as ET
-from io import BytesIO
+from geopy.distance import geodesic
 
 # Coordinate scaling constant specific to Lezyne format
 LAT_LNG_SCALE = 1.1930464
+
+TRACKPOINT_COURSEPOINT_THRESHOLD =  2
 
 # CRC-16 lookup table
 CRC_TABLE = [
@@ -121,28 +123,37 @@ def extract_trackpoints_coursepoints(xml):
 
     last_trackpoint = 0
     for cp in root.findall(".//ns:CoursePoint", ns):
+
+        trackpoint = 0
         name = cp.find("ns:Name", ns)
         lat = cp.find("ns:Position/ns:LatitudeDegrees", ns)
         lon = cp.find("ns:Position/ns:LongitudeDegrees", ns)
         typ = cp.find("ns:PointType", ns)
         notes = cp.find("ns:Notes", ns)
-        trackpoint = trackpoints[last_trackpoint:].index((float(lat.text),float(lon.text)))+1+last_trackpoint or 0
-        last_trackpoint = trackpoint
 
         # Use empty string if the tag is missing or the text is None
         name_text = name.text.strip() if name is not None and name.text else ""
         typ_text = typ.text.strip() if typ is not None and typ.text else ""
         notes_text = notes.text.strip() if notes is not None and notes.text else ""
+        lat_val = float(lat.text)
+        lon_val = float(lon.text)
+
+        for idx, tp in enumerate(trackpoints[last_trackpoint:]):
+            dist = geodesic((lat_val,lon_val), tp).meters
+            if dist <= TRACKPOINT_COURSEPOINT_THRESHOLD:
+                print(f"[Matched Trackpoint] [{last_trackpoint + idx}] Dist: {dist}")
+                last_trackpoint += idx
+                trackpoint = last_trackpoint
+                break
 
         if lat is not None and lon is not None:
             point_data = (
                 name_text,
-                float(lat.text),
-                float(lon.text),
+                lat_val,
+                lon_val,
                 typ_text,
                 notes_text,
                 trackpoint
-
             )
             coursepoints.append(point_data)
 
@@ -197,9 +208,9 @@ def convert_file(input_bytes):
     print(f"[Header] Destination Latitude: {trackpoints[0][0]}")
     byte_array += dest_lat_bytes  # Add destination latitude
 
-    route_provider = ROUTE_PROVIDERS[5][3]  # Route provider
-    print(f"[Header] Device ID: {route_provider.decode()}")
-    byte_array += route_provider  # Route provider
+    route_provider = ROUTE_PROVIDERS[5][2]  # Route provider
+    print(f"[Header] Device ID: {route_provider}")
+    byte_array += bytes(route_provider, 'utf-8')  # Route provider
 
     trimmed_flag = (1).to_bytes(1, 'little')  # Route trimmed flag (1 = yes)
     print(f"[Header] Trimmed Route Flag: 1")
@@ -217,7 +228,6 @@ def convert_file(input_bytes):
     print(f"[Header] Reroute Flag: 0")
     byte_array += reroute_flag  # Add reroute flag
 
-    
     byte_array += polyline  # Append encoded polyline data
 
     # Append each coursepoint as a structured binary block
@@ -239,4 +249,4 @@ def convert_file(input_bytes):
     checksum = get_crc16(data_for_crc)
     byte_array += checksum.to_bytes(2, 'little')  # CRC16 checksum
 
-    return byte_array
+    return byte_array, trackpoints, coursepoints
