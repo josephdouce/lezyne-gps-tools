@@ -48,7 +48,7 @@ def download():
 
         with zipfile.ZipFile(zip_bytes, mode="w",
                              compression=zipfile.ZIP_DEFLATED) as zipf:
-            for idx, (sw, ne) in enumerate(tiles):
+            for sw, ne in tiles:
                 url = request_tile(sw, ne)
                 if url:
                     try:
@@ -62,9 +62,10 @@ def download():
                     except Exception as error:
                         logging.debug(f"Error downloading {url}: {error}")
                 progress_data["completed"] += 1
-            progress_data["completed"] += 1
 
-        zip_bytes.seek(0)
+        zip_bytes.seek(0) 
+        time.sleep(3) 
+        progress_data["completed"] += 1
 
     sw_lat = float(request.form['sw_lat'])
     sw_lon = float(request.form['sw_lon'])
@@ -112,8 +113,9 @@ def progress():
 @app.route('/download_zip')
 def download_zip():
     global zip_bytes
+    bytesToSend = zip_bytes
     return send_file(
-        zip_bytes,
+        bytesToSend,
         mimetype='application/zip',
         as_attachment=True,
         download_name='downloaded_tiles.zip'
