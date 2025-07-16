@@ -1,5 +1,5 @@
 from downloader import generate_tiles, request_tile
-from flask import Flask, render_template, request, send_file, Response, jsonify
+from flask import Flask, render_template, request, send_file, Response, jsonify, stream_with_context
 from tcx2lzr import convert_file
 from io import BytesIO
 import io
@@ -7,10 +7,12 @@ import zipfile
 import requests
 import threading
 import time
+import logging
 
 app = Flask(__name__)
 progress_data = {"total": 0, "completed": 0}
 zip_bytes = BytesIO()
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
 
 @app.route('/')
@@ -35,14 +37,15 @@ def get_track():
         ],
     })
 
+
 @app.route('/download', methods=['POST'])
 def download():
     def build_zip(sw_lat, sw_lon, ne_lat, ne_lon):
         global zip_bytes, progress_data
         zip_bytes = BytesIO()
         tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
-        progress_data["total"] = len(tiles)
-        progress_data["completed"] = 0
+        progress_data["total"] = len(tiles)+2
+        progress_data["completed"] += 1
 
         with zipfile.ZipFile(zip_bytes, mode="w",
                              compression=zipfile.ZIP_DEFLATED) as zipf:
@@ -58,8 +61,9 @@ def download():
                             )
                             zipf.writestr(filename, response.content)
                     except Exception as error:
-                        print(f"Error downloading {url}: {error}")
+                        logging.debug(f"Error downloading {url}: {error}")
                 progress_data["completed"] += 1
+            progress_data["completed"] += 1
 
         zip_bytes.seek(0)
 
@@ -85,7 +89,11 @@ def progress():
                 break
             time.sleep(0.5)
 
-    return Response(event_stream(), mimetype="text/event-stream")
+    response = Response(stream_with_context(
+        event_stream()), mimetype='text/event-stream')
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"  # For nginx
+    return response
 
 
 @app.route('/download_zip')
@@ -109,7 +117,7 @@ def get_lzr():
         return "Invalid file type", 400
 
     input_bytes = file.read()
-    lzr_bytes,_,_ = convert_file(input_bytes)
+    lzr_bytes, _, _ = convert_file(input_bytes)
 
     # Return the binary file
     return send_file(

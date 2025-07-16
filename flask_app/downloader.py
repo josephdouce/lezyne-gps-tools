@@ -1,12 +1,18 @@
 import os
 import requests
+import logging
 
 LAT_STEP = 0.1
 LON_STEP = 0.2
 OVERLAP = 0.01
 
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
+
+
 def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
-    print(f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
+    logging.debug(
+        f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
 
     tiles = []
     lat = sw_lat
@@ -24,12 +30,12 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
                 tile_ne['lon'] <= sw_lon or tile_sw['lon'] >= ne_lon
             ):
                 tiles.append((tile_sw, tile_ne))
-                print(f"Tile SW: {tile_sw}, NE: {tile_ne}")
+                logging.debug(f"Tile SW: {tile_sw}, NE: {tile_ne}")
 
             lon += LON_STEP
         lat += LAT_STEP
 
-    print(f"Total tiles generated: {len(tiles)}")
+    logging.debug(f"Total tiles generated: {len(tiles)}")
     return tiles
 
 
@@ -42,25 +48,25 @@ def request_tile(sw, ne):
         "ne_gps_lon": f"{ne['lon']:.2f}"
     }
 
-    print(f"Requesting tile: {payload}")
+    logging.debug(f"Requesting tile: {payload}")
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
         data = response.json()
         if data.get("APIResultMessage") == "Success":
-            print(f"✅ Success: {data.get('mf_url')}")
+            logging.debug(f"✅ Success: {data.get('mf_url')}")
             return data.get("mf_url")
         else:
-            print("❌ API failed:", data)
+            logging.debug("❌ API failed:", data)
     except Exception as error:
-        print(f"❌ Error fetching tile {sw} to {ne}:", error)
+        logging.debug(f"❌ Error fetching tile {sw} to {ne}:", error)
     return None
 
 
 def download_file(url, dest_folder):
     local_filename = url.split("/")[-1]
     dest_path = os.path.join(dest_folder, local_filename)
-    print(f"⬇️ Downloading {url} to {dest_path}")
+    logging.debug(f"⬇️ Downloading {url} to {dest_path}")
     response = requests.get(url, stream=True)
     with open(dest_path, 'wb') as file:
         for chunk in response.iter_content(chunk_size=8192):

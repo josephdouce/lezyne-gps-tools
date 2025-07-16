@@ -13,8 +13,8 @@
   <body>
     <div class="top-section">
       <div class="card">
-        <h3>TCX to LZR Converter</h3>
-        <form action="/get_lzr" method="post" enctype="multipart/form-data">
+        <form action="/get_lzr" method="post" enctype="multipart/form-data" id="lzrForm">
+          <label for="fileInput" class="custom-file-label">Choose TCX File</label>
           <input id="fileInput" type="file" name="file" accept=".tcx" required />
           <p id="status">Waiting for file<span id="dots"></span></p>
           <button id="downloadLzrBtn" type="submit" disabled>Download .lzr</button>
@@ -27,14 +27,18 @@
           <input type="hidden" id="sw_lon" name="sw_lon" required />
           <input type="hidden" id="ne_lat" name="ne_lat" required />
           <input type="hidden" id="ne_lon" name="ne_lon" required />
-          <h3>Tiles to download</h3><p><span id="tileCount">0</span></p>
-          <button id="downloadTilesBtn" type="submit">Download</button>
-          <p id="progressStatus">Progress: 0/0</p>
+          <h3>Tiles to download</h3>
+          <p><span id="tileCount">0</span></p>
+          <button id="downloadTilesBtn" type="submit" disabled>Download</button>
+          <div id="progressContainer">
+            <div id="progressBar"></div>
+            <span id="progressText">Select map area and start download...</span>
+          </div>
         </form>
       </div>
 
       <div class="card">
-        <h3>Select "Maps" folder from GPS device to see existing on map</h3>
+        <label for="folderPicker" class="custom-file-label">Select Maps Folder</label>
         <input type="file" id="folderPicker" webkitdirectory multiple />
       </div>
     </div>
@@ -105,6 +109,7 @@
       }
 
       document.getElementById("tileCount").innerText = tileCount;
+      document.getElementById("downloadTilesBtn").disabled = tileCount === 0;
     });
   </script>
 
@@ -196,26 +201,26 @@
   <script>
     document.getElementById("downloadForm").addEventListener("submit", function (e) {
       e.preventDefault();
+      document.getElementById("downloadTilesBtn").disabled = true;
+      document.getElementById("downloadTilesBtn").innerHTML = "Downloading Tiles...";
       const form = e.target;
       const data = new FormData(form);
       fetch("/download", { method: "POST", body: data }).then(() => {
         const eventSource = new EventSource("/progress");
         eventSource.onmessage = function (e) {
-          document.getElementById("progressStatus").innerText = "Progress: " + e.data;
+          const [done, total] = e.data.split("/").map(Number);
+          const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
 
-          const [done, total] = e.data.split("/"); // declare first
-          const downloadBtn = document.getElementById("downloadTilesBtn");
+          document.getElementById("progressBar").style.width = `${percent}%`;
+          document.getElementById("progressText").textContent = `Progress: ${percent}%`;
 
-          if (done === "0" || done != total) {
-            document.getElementById("progressStatus").innerText += " Downloading...";
-            downloadBtn.disabled = true;
-            return;
-          }
-          if (done === total) {
+          if ((done === total) & (done != 0)) {
             eventSource.close();
-            document.getElementById("progressStatus").innerText += "✅ Done";
+            document.getElementById("progressText").textContent = `✅ Done`;
+
             window.location = "/download_zip";
-            downloadBtn.disabled = false;
+            document.getElementById("downloadTilesBtn").disabled = false;
+            document.getElementById("downloadTilesBtn").innerHTML = "Download";
           }
         };
       });
