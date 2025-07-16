@@ -5,15 +5,12 @@ from io import BytesIO
 import io
 import zipfile
 import requests
-import threading
 import time
 import logging
 
 app = Flask(__name__)
 progress_data = {"total": 0, "completed": 0}
 zip_bytes = BytesIO()
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-
 
 @app.route('/')
 def index():
@@ -42,6 +39,7 @@ def get_track():
 def download():
     def build_zip(sw_lat, sw_lon, ne_lat, ne_lon):
         global zip_bytes, progress_data
+        progress_data["completed"] = 0
         zip_bytes = BytesIO()
         tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
         progress_data["total"] = len(tiles)+2
@@ -72,17 +70,14 @@ def download():
     ne_lat = float(request.form['ne_lat'])
     ne_lon = float(request.form['ne_lon'])
 
-    threading.Thread(
-        target=build_zip,
-        args=(sw_lat, sw_lon, ne_lat, ne_lon)
-    ).start()
-
-    return "started"
+    build_zip(sw_lat, sw_lon, ne_lat, ne_lon)
+    return "Zip Built", 204
 
 
 @app.route('/progress')
 def progress():
     def event_stream():
+        global progress_data
         while True:
             yield f"data: {progress_data['completed']}/{progress_data['total']}\n\n"
             if progress_data["completed"] >= progress_data["total"]:
@@ -130,3 +125,6 @@ def get_lzr():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+else: 
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)

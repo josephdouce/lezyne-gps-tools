@@ -43,9 +43,6 @@ import logging
 import xml.etree.ElementTree as ET
 from geopy.distance import geodesic
 
-
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-
 # Coordinate scaling constant specific to Lezyne format
 LAT_LNG_SCALE = 1.1930464
 

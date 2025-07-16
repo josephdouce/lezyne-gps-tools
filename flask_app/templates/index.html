@@ -32,7 +32,7 @@
           <button id="downloadTilesBtn" type="submit" disabled>Download</button>
           <div id="progressContainer">
             <div id="progressBar"></div>
-            <span id="progressText">Select map area and start download...</span>
+            <span id="progressText">Awaiting tile selection...</span>
           </div>
         </form>
       </div>
@@ -205,24 +205,24 @@
       document.getElementById("downloadTilesBtn").innerHTML = "Downloading Tiles...";
       const form = e.target;
       const data = new FormData(form);
+      const eventSource = new EventSource("/progress");
+      eventSource.onmessage = function (e) {
+        const [done, total] = e.data.split("/").map(Number);
+        const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
+
+        document.getElementById("progressBar").style.width = `${percent}%`;
+        document.getElementById("progressText").textContent = `Progress: ${percent}%`;
+
+        if ((done === total) & (done != 0)) {
+          eventSource.close();
+          document.getElementById("progressText").textContent = `✅ Done`;
+          document.getElementById("downloadTilesBtn").disabled = false;
+          document.getElementById("downloadTilesBtn").innerHTML = "Download";
+        }
+      };
+
       fetch("/download", { method: "POST", body: data }).then(() => {
-        const eventSource = new EventSource("/progress");
-        eventSource.onmessage = function (e) {
-          const [done, total] = e.data.split("/").map(Number);
-          const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
-
-          document.getElementById("progressBar").style.width = `${percent}%`;
-          document.getElementById("progressText").textContent = `Progress: ${percent}%`;
-
-          if ((done === total) & (done != 0)) {
-            eventSource.close();
-            document.getElementById("progressText").textContent = `✅ Done`;
-
-            window.location = "/download_zip";
-            document.getElementById("downloadTilesBtn").disabled = false;
-            document.getElementById("downloadTilesBtn").innerHTML = "Download";
-          }
-        };
+        window.location.href = "/download_zip";
       });
     });
   </script>

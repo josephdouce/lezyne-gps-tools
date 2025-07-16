@@ -6,10 +6,6 @@ LAT_STEP = 0.1
 LON_STEP = 0.2
 OVERLAP = 0.01
 
-
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-
-
 def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
     logging.debug(
         f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
