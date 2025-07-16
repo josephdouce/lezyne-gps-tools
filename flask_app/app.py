@@ -12,6 +12,7 @@ import threading
 app = Flask(__name__)
 progress_data = {"total": 0, "completed": 0}
 zip_bytes = BytesIO()
+zip_thread = threading.Thread()
 
 @app.route('/')
 def index():
@@ -38,6 +39,7 @@ def get_track():
 
 @app.route('/download', methods=['POST'])
 def download():
+    global zip_thread
     def build_zip(sw_lat, sw_lon, ne_lat, ne_lon):
         global zip_bytes, progress_data
         progress_data["completed"] = 0
@@ -72,11 +74,12 @@ def download():
     ne_lat = float(request.form['ne_lat'])
     ne_lon = float(request.form['ne_lon'])
 
-    threading.Thread(
+    zip_thread = threading.Thread(
         target=build_zip,
         args=(sw_lat, sw_lon, ne_lat, ne_lon),
         daemon=True
-    ).start()
+    )
+    zip_thread.start()
 
     return "", 202
 
@@ -84,17 +87,18 @@ def download():
 @app.route('/progress')
 def progress():
     def event_stream():
-        global progress_data
+        global progress_data, zip_thread
 
         last_sent = (-1, -1)
         while True:
             done = progress_data["completed"]
             total = progress_data["total"]
+            thread = int(zip_thread.is_alive())
 
             # Send only when progress changes
-            if (done, total) != last_sent:
-                yield f"data: {done}/{total}\n\n"
-                last_sent = (done, total)
+            if (done, total, thread) != last_sent:
+                yield f"data: {done}/{total}/{thread}\n\n"
+                last_sent = (done, total, thread)
             else:
                 # Send keep-alive to keep connection open
                 yield ": keep-alive\n\n"

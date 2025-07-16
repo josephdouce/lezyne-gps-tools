@@ -209,7 +209,7 @@
       progressEventSource = new EventSource("/progress");
 
       progressEventSource.onmessage = function (e) {
-        const [done, total] = e.data.split("/").map(Number);
+        const [done, total, thread] = e.data.split("/").map(Number);
         const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
 
         if (done != 0 && total != 0) {
@@ -217,7 +217,7 @@
           document.getElementById("progressText").textContent = `Progress: ${percent}%`;
         }
 
-        if (done === total && done != 0&& total != 0 ) {
+        if (done === total && done != 0 && total != 0  && thread == 0) {
           document.getElementById("progressText").textContent = `✅ Done`;
           document.getElementById("downloadTilesBtn").disabled = false;
           document.getElementById("downloadTilesBtn").innerHTML = "Download";
@@ -239,7 +239,7 @@
       const data = new FormData(form);
 
       fetch("/download", { method: "POST", body: data })
-      
+
     });
   </script>
 </html>
