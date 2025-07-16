@@ -203,26 +203,32 @@
       e.preventDefault();
       document.getElementById("downloadTilesBtn").disabled = true;
       document.getElementById("downloadTilesBtn").innerHTML = "Downloading Tiles...";
+      document.getElementById("progressBar").style.width = `0%`;
+      document.getElementById("progressText").textContent = `Progress: 0%`;
       const form = e.target;
       const data = new FormData(form);
       const eventSource = new EventSource("/progress");
-      eventSource.onmessage = function (e) {
-        const [done, total] = e.data.split("/").map(Number);
-        const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
-
-        document.getElementById("progressBar").style.width = `${percent}%`;
-        document.getElementById("progressText").textContent = `Progress: ${percent}%`;
-
-        if ((done === total) & (done != 0)) {
-          eventSource.close();
-          document.getElementById("progressText").textContent = `✅ Done`;
-          document.getElementById("downloadTilesBtn").disabled = false;
-          document.getElementById("downloadTilesBtn").innerHTML = "Download";
-        }
-      };
 
       fetch("/download", { method: "POST", body: data }).then(() => {
-        window.location.href = "/download_zip";
+        // Start listening to progress AFTER download starts
+        const eventSource = new EventSource("/progress");
+        eventSource.onmessage = function (e) {
+          const [done, total] = e.data.split("/").map(Number);
+          const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
+
+          document.getElementById("progressBar").style.width = `${percent}%`;
+          document.getElementById("progressText").textContent = `Progress: ${percent}%`;
+
+          if (done === total && done !== 0) {
+            eventSource.close();
+            document.getElementById("progressText").textContent = `✅ Done`;
+            document.getElementById("downloadTilesBtn").disabled = false;
+            document.getElementById("downloadTilesBtn").innerHTML = "Download";
+
+            // Trigger download only after complete
+            window.location.href = "/download_zip";
+          }
+        };
       });
     });
   </script>

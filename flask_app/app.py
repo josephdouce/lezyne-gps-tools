@@ -7,6 +7,7 @@ import zipfile
 import requests
 import time
 import logging
+import threading
 
 app = Flask(__name__)
 progress_data = {"total": 0, "completed": 0}
@@ -70,24 +71,41 @@ def download():
     ne_lat = float(request.form['ne_lat'])
     ne_lon = float(request.form['ne_lon'])
 
-    build_zip(sw_lat, sw_lon, ne_lat, ne_lon)
-    return "Zip Built", 204
+    threading.Thread(
+        target=build_zip,
+        args=(sw_lat, sw_lon, ne_lat, ne_lon),
+        daemon=True
+    ).start()
+
+    return "", 202
 
 
 @app.route('/progress')
 def progress():
     def event_stream():
         global progress_data
+
+        last_sent = (-1, -1)
         while True:
-            yield f"data: {progress_data['completed']}/{progress_data['total']}\n\n"
-            if progress_data["completed"] >= progress_data["total"]:
-                break
+            done = progress_data["completed"]
+            total = progress_data["total"]
+
+            # Send only when progress changes
+            if (done, total) != last_sent:
+                yield f"data: {done}/{total}\n\n"
+                last_sent = (done, total)
+            else:
+                # Send keep-alive to keep connection open
+                yield ": keep-alive\n\n"
+
             time.sleep(0.5)
 
-    response = Response(stream_with_context(
-        event_stream()), mimetype='text/event-stream')
+    response = Response(
+        stream_with_context(event_stream()),
+        mimetype='text/event-stream'
+    )
     response.headers["Cache-Control"] = "no-cache"
-    response.headers["X-Accel-Buffering"] = "no"  # For nginx
+    response.headers["X-Accel-Buffering"] = "no"
     return response
 
 
