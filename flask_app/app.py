@@ -2,7 +2,6 @@ from downloader import generate_tiles, request_tile
 from flask import Flask, render_template, request, send_file, Response, jsonify, stream_with_context
 from tcx2lzr import convert_file
 from io import BytesIO
-import io
 import zipfile
 import requests
 import time
@@ -10,14 +9,42 @@ import logging
 import threading
 
 app = Flask(__name__)
-progress_data = {"total": 0, "completed": 0}
-zip_bytes = BytesIO()
-zip_thread = threading.Thread()
+
+class ZipManager:
+    def __init__(self):
+        self.progress = {"total": 0, "completed": 0}
+        self.zip_bytes = BytesIO()
+        self.thread = None
+
+    def build_zip(self, sw_lat, sw_lon, ne_lat, ne_lon):
+        self.progress["completed"] = 0
+        self.zip_bytes = BytesIO()
+        tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
+        self.progress["total"] = len(tiles) + 2
+        self.progress["completed"] += 1
+
+        with zipfile.ZipFile(self.zip_bytes, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            for sw, ne in tiles:
+                url = request_tile(sw, ne)
+                if url:
+                    try:
+                        response = requests.get(url)
+                        if response.status_code == 200:
+                            filename = f"mf_{sw['lat']}_{sw['lon']}_{ne['lat']}_{ne['lon']}.lzm"
+                            zipf.writestr(filename, response.content)
+                    except Exception as error:
+                        logging.debug(f"Error downloading {url}: {error}")
+                self.progress["completed"] += 1
+
+        self.zip_bytes.seek(0)
+        self.progress["completed"] += 1
+
+# Attach to app config
+app.config['zip_manager'] = ZipManager()
 
 @app.route('/')
 def index():
     return render_template("index.html")
-
 
 @app.route('/get_track', methods=['POST'])
 def get_track():
@@ -36,94 +63,58 @@ def get_track():
         ],
     })
 
-
 @app.route('/download', methods=['POST'])
 def download():
-    global zip_thread
-    def build_zip(sw_lat, sw_lon, ne_lat, ne_lon):
-        global zip_bytes, progress_data
-        progress_data["completed"] = 0
-        zip_bytes = BytesIO()
-        tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
-        progress_data["total"] = len(tiles)+2
-        progress_data["completed"] += 1
-
-        with zipfile.ZipFile(zip_bytes, mode="w",
-                             compression=zipfile.ZIP_DEFLATED) as zipf:
-            for sw, ne in tiles:
-                url = request_tile(sw, ne)
-                if url:
-                    try:
-                        response = requests.get(url)
-                        if response.status_code == 200:
-                            filename = (
-                                f"mf_{sw['lat']}_{sw['lon']}_"
-                                f"{ne['lat']}_{ne['lon']}.lzm"
-                            )
-                            zipf.writestr(filename, response.content)
-                    except Exception as error:
-                        logging.debug(f"Error downloading {url}: {error}")
-                progress_data["completed"] += 1
-
-        zip_bytes.seek(0) 
-        progress_data["completed"] += 1
-
     sw_lat = float(request.form['sw_lat'])
     sw_lon = float(request.form['sw_lon'])
     ne_lat = float(request.form['ne_lat'])
     ne_lon = float(request.form['ne_lon'])
 
-    zip_thread = threading.Thread(
-        target=build_zip,
+    zm = app.config['zip_manager']
+    zm.thread = threading.Thread(
+        target=zm.build_zip,
         args=(sw_lat, sw_lon, ne_lat, ne_lon),
         daemon=True
     )
-    zip_thread.start()
+    zm.thread.start()
 
     return "", 202
 
-
 @app.route('/progress')
 def progress():
+    zm = app.config['zip_manager']
     def event_stream():
-        global progress_data, zip_thread
-
         last_sent = (-1, -1)
         while True:
-            done = progress_data["completed"]
-            total = progress_data["total"]
-            thread = int(zip_thread.is_alive())
+            done = zm.progress["completed"]
+            total = zm.progress["total"]
+            thread_alive = int(zm.thread.is_alive()) if zm.thread else 0
 
-            # Send only when progress changes
-            if (done, total, thread) != last_sent:
-                yield f"data: {done}/{total}/{thread}\n\n"
-                last_sent = (done, total, thread)
+            if (done, total, thread_alive) != last_sent:
+                yield f"data: {done}/{total}/{thread_alive}\n\n"
+                last_sent = (done, total, thread_alive)
             else:
-                # Send keep-alive to keep connection open
                 yield ": keep-alive\n\n"
-
             time.sleep(0.5)
 
-    response = Response(
+    return Response(
         stream_with_context(event_stream()),
-        mimetype='text/event-stream'
+        mimetype='text/event-stream',
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
     )
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["X-Accel-Buffering"] = "no"
-    return response
 
 @app.route('/download_zip')
 def download_zip():
-    global zip_bytes, zip_thread
-    bytesToSend = zip_bytes
-
+    zm = app.config['zip_manager']
     return send_file(
-        bytesToSend,
+        zm.zip_bytes,
         mimetype='application/zip',
         as_attachment=True,
         download_name='downloaded_tiles.zip'
     )
-
 
 @app.route('/get_lzr', methods=['POST'])
 def get_lzr():
@@ -137,17 +128,15 @@ def get_lzr():
     input_bytes = file.read()
     lzr_bytes, _, _ = convert_file(input_bytes)
 
-    # Return the binary file
     return send_file(
-        io.BytesIO(lzr_bytes),
+        BytesIO(lzr_bytes),
         as_attachment=True,
         download_name=file.filename.replace(".tcx", ".lzr"),
         mimetype="application/octet-stream"
     )
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-else: 
+    app.run(debug=True)
+else:
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
