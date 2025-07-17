@@ -66,7 +66,6 @@ def download():
                 progress_data["completed"] += 1
 
         zip_bytes.seek(0) 
-        time.sleep(3) 
         progress_data["completed"] += 1
 
     sw_lat = float(request.form['sw_lat'])
@@ -113,11 +112,11 @@ def progress():
     response.headers["X-Accel-Buffering"] = "no"
     return response
 
-
 @app.route('/download_zip')
 def download_zip():
-    global zip_bytes
+    global zip_bytes, zip_thread
     bytesToSend = zip_bytes
+
     return send_file(
         bytesToSend,
         mimetype='application/zip',
