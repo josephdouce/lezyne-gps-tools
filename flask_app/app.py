@@ -1,5 +1,5 @@
 from downloader import generate_tiles, request_tile
-from flask import Flask, render_template, request, send_file, Response, jsonify, stream_with_context
+from flask import Flask, render_template, request, send_file, Response, jsonify, stream_with_context, after_this_request  
 from tcx2lzr import convert_file
 from io import BytesIO
 import zipfile
@@ -7,36 +7,43 @@ import requests
 import time
 import logging
 import threading
+import os
+import json
 
 app = Flask(__name__)
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))  # Points to flask_app/
+TEMP_DIR = os.path.join(BASE_DIR, "temp")
+
+os.makedirs(BASE_DIR, exist_ok=True)
 
 class ZipManager:
     def __init__(self):
         self.progress = {"total": 0, "completed": 0}
-        self.zip_bytes = BytesIO()
         self.thread = None
 
     def build_zip(self, sw_lat, sw_lon, ne_lat, ne_lon):
         self.progress["completed"] = 0
-        self.zip_bytes = BytesIO()
         tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
         self.progress["total"] = len(tiles) + 2
         self.progress["completed"] += 1
 
-        with zipfile.ZipFile(self.zip_bytes, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        # Use stable path based on coordinates
+        filename = f"tiles_{sw_lat}_{sw_lon}_{ne_lat}_{ne_lon}.zip"
+        zip_path = os.path.join(TEMP_DIR, filename)
+
+        with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
             for sw, ne in tiles:
                 url = request_tile(sw, ne)
                 if url:
                     try:
                         response = requests.get(url)
                         if response.status_code == 200:
-                            filename = f"mf_{sw['lat']}_{sw['lon']}_{ne['lat']}_{ne['lon']}.lzm"
-                            zipf.writestr(filename, response.content)
+                            fname = f"mf_{sw['lat']}_{sw['lon']}_{ne['lat']}_{ne['lon']}.lzm"
+                            zipf.writestr(fname, response.content)
                     except Exception as error:
                         logging.debug(f"Error downloading {url}: {error}")
                 self.progress["completed"] += 1
-
-        self.zip_bytes.seek(0)
         self.progress["completed"] += 1
 
 # Attach to app config
@@ -56,9 +63,9 @@ def get_track():
     _, trackpoints, coursepoints = convert_file(input_bytes)
 
     return jsonify({
-        "trackpoints": [{"lat": lat, "lon": lon} for lat, lon in trackpoints],
+        "trackpoints": [{"lat": lat, "lon": lon} for lat, lon, _ in trackpoints],
         "coursepoints": [
-            {"lat": lat, "lon": lon, "label": notes or name}
+            {"lat": lat, "lon": lon, "label": notes or name, "type": typ}
             for name, lat, lon, typ, notes, _ in coursepoints
         ],
     })
@@ -71,6 +78,9 @@ def download():
     ne_lon = float(request.form['ne_lon'])
 
     zm = app.config['zip_manager']
+    zm.progress = {"total": 0, "completed": 0}
+    zm.zip_path = None
+
     zm.thread = threading.Thread(
         target=zm.build_zip,
         args=(sw_lat, sw_lon, ne_lat, ne_lon),
@@ -80,37 +90,56 @@ def download():
 
     return "", 202
 
+
 @app.route('/progress')
 def progress():
     zm = app.config['zip_manager']
+
+    # Recompute the same filename used in build_zip
+    sw_lat = request.args.get('sw_lat', type=float)
+    sw_lon = request.args.get('sw_lon', type=float)
+    ne_lat = request.args.get('ne_lat', type=float)
+    ne_lon = request.args.get('ne_lon', type=float)
+    filename = f"tiles_{sw_lat}_{sw_lon}_{ne_lat}_{ne_lon}.zip"
+    zip_path = os.path.join(TEMP_DIR, filename)
+
     def event_stream():
-        last_sent = (-1, -1)
+        last_sent = (-1, -1, False, -1)
         while True:
             done = zm.progress["completed"]
             total = zm.progress["total"]
-            thread_alive = int(zm.thread.is_alive()) if zm.thread else 0
+            ready = os.path.exists(zip_path) and (not zm.thread or not zm.thread.is_alive())
+            zip_size = os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
 
-            if (done, total, thread_alive) != last_sent:
-                yield f"data: {done}/{total}/{thread_alive}\n\n"
-                last_sent = (done, total, thread_alive)
+            current = (done, total, ready, zip_size)
+            if current != last_sent:
+                yield f"data: {json.dumps({'completed': done, 'total': total, 'ready': ready, 'size': zip_size})}\n\n"
+                last_sent = current
             else:
                 yield ": keep-alive\n\n"
+
             time.sleep(0.5)
 
-    return Response(
-        stream_with_context(event_stream()),
-        mimetype='text/event-stream',
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
+    response = Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
 
 @app.route('/download_zip')
 def download_zip():
-    zm = app.config['zip_manager']
+    sw_lat = request.args.get('sw_lat', type=float)
+    sw_lon = request.args.get('sw_lon', type=float)
+    ne_lat = request.args.get('ne_lat', type=float)
+    ne_lon = request.args.get('ne_lon', type=float)
+    filename = f"tiles_{sw_lat}_{sw_lon}_{ne_lat}_{ne_lon}.zip"
+    zip_path = os.path.join(TEMP_DIR, filename)
+
+    if not os.path.exists(zip_path):
+        return "ZIP file not ready or missing", 404
+
+    # Optional: delay cleanup, or keep files permanently and clean them later
     return send_file(
-        zm.zip_bytes,
+        zip_path,
         mimetype='application/zip',
         as_attachment=True,
         download_name='downloaded_tiles.zip'

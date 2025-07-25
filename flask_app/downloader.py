@@ -1,12 +1,13 @@
 import os
 import requests
 import logging
+import math
 
-LAT_STEP = 0.1
-LON_STEP = 0.2
+LAT_STEP = 10/111
 OVERLAP = 0.01
 
 def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
+    lon_step = 10 / (111 * math.cos(math.radians(sw_lat)))
     logging.debug(
         f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
 
@@ -18,7 +19,7 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
             tile_sw = {'lat': round(lat, 6), 'lon': round(lon, 6)}
             tile_ne = {
                 'lat': round(lat + LAT_STEP + OVERLAP, 6),
-                'lon': round(lon + LON_STEP + OVERLAP, 6)
+                'lon': round(lon + lon_step + OVERLAP, 6)
             }
 
             if not (
@@ -28,7 +29,7 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
                 tiles.append((tile_sw, tile_ne))
                 logging.debug(f"Tile SW: {tile_sw}, NE: {tile_ne}")
 
-            lon += LON_STEP
+            lon += lon_step
         lat += LAT_STEP
 
     logging.debug(f"Total tiles generated: {len(tiles)}")

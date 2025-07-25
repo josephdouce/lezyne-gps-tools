@@ -61,7 +61,7 @@ button:hover:not(:disabled) {
 }
 
 #status {
-  font-style: italic;
+  font-style: normal;
   color: #444;
 }
 

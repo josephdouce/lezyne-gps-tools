@@ -42,11 +42,21 @@ import struct
 import logging
 import xml.etree.ElementTree as ET
 from geopy.distance import geodesic
+import pandas as pd
 
-# Coordinate scaling constant specific to Lezyne format
-LAT_LNG_SCALE = 1.1930464
 
-TRACKPOINT_COURSEPOINT_THRESHOLD = 2
+# --- Constants ---
+AVG_GRADIENT_START_THRESHOLD = 0      # % average gradient required to start
+CURRENT_GRADIENT_START_THRESHOLD = 0  # % current gradient required to start
+AVG_GRADIENT_END_THRESHOLD = 0        # % average gradient to end (typically < 0)
+CURRENT_GRADIENT_END_THRESHOLD = 0    # % current gradient to end (typically < 0)
+CLIMB_NOTIFY_DISTANCE = 200              # meters to look ahead for gradient averaging
+LOOKAHEAD_DISTANCE = 200              # meters to look ahead for gradient averaging
+MERGE_GRADIENT_THRESHOLD = 3          # % minimum avg gradient required to merge climbs
+MIN_ELEV_GAIN = 50                    # meters: minimum elevation gain to qualify
+LAT_LNG_SCALE = 1.1930464             # Coordinate scaling constant specific to Lezyne format
+TRACKPOINT_COURSEPOINT_THRESHOLD = 2  # Distance in meters to match coursepoint to a trackpint
+NAMESPACE = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"} # Namespace for parsing TCX
 
 # CRC-16 lookup table
 CRC_TABLE = [
@@ -81,6 +91,8 @@ ROUTE_PROVIDERS = [
 ]
 
 
+
+
 def zigzag_encode(n):
     return (n << 1) ^ (n >> 31)
 
@@ -108,38 +120,153 @@ def lezyne_lat_lon_to_bytes(coord):
 def extract_trackpoints_coursepoints(xml):
     # Parse and extract all GPS trackpoints from TCX
     root = ET.fromstring(xml)
-    ns = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+
+    # ---- TRACKPOINTS----
     trackpoints = []
 
-    for tp in root.findall(".//ns:Trackpoint", ns):
+    for tp in root.findall(".//ns:Trackpoint", NAMESPACE):
         lat = tp.find("ns:Position/ns:LatitudeDegrees",
-                      ns)  # Find latitude element
+                      NAMESPACE)  # Find latitude element
         lon = tp.find("ns:Position/ns:LongitudeDegrees",
-                      ns)  # Find longitude element
+                      NAMESPACE)  # Find longitude element
+        alt = tp.find('ns:AltitudeMeters', NAMESPACE)
 
         if lat is not None and lon is not None:
             lat_val = float(lat.text)
             lon_val = float(lon.text)
+            alt_val = float(alt.text) if alt is not None else 0
             # Add tuple (lat, lon) to list
-            trackpoints.append((lat_val, lon_val))
-            logging.debug(f"[Trackpoint] Lat: {lat.text}, Lon: {lon.text}")
+            trackpoints.append((lat_val, lon_val, alt_val))
+            logging.debug(f"[Trackpoint] Lat: {lat_val}, Lon: {lon_val}, Alt: {alt_val}")
 
     logging.debug(
         # Summary
         f"[Trackpoint] Total: {len(trackpoints)} trackpoints extracted.")
+    
+    # ---- CLIMB DETECTION ----
+    df = pd.DataFrame(trackpoints, columns=["Latitude", "Longitude", "Altitude"])
+    df["Distance"] = [0] + [geodesic((trackpoints[i-1][0], trackpoints[i-1][1]), (trackpoints[i][0], trackpoints[i][1])).meters for i in range(1, len(trackpoints))]
+    df["DistanceMeters"] = df["Distance"].cumsum()
+    df['DistanceDiff'] = df['DistanceMeters'].diff().fillna(0)
+    df['AltitudeDiff'] = df['Altitude'].diff().fillna(0)
+    df['Gradient'] = (100 * df['AltitudeDiff'] / df['DistanceDiff']).fillna(0)
 
-    # Parse and extract coursepoints (turn instructions, waypoints, etc.)
+
+    climbs = []
+    climb_in_progress = False
+    start_idx = None
+    i = 0
+    while i < len(df) - 1:
+        current_dist = df.loc[i, 'DistanceMeters']
+        current_grad = df.loc[i, 'Gradient']
+        future_df = df[df['DistanceMeters'] >= current_dist + LOOKAHEAD_DISTANCE]
+        if future_df.empty:
+            break
+        probe_idx = future_df.index[0]
+        dist_ahead = df.loc[probe_idx, 'DistanceMeters'] - current_dist
+        elev_ahead = df.loc[probe_idx, 'Altitude'] - df.loc[i, 'Altitude']
+        avg_grad_ahead = 100 * elev_ahead / dist_ahead if dist_ahead > 0 else 0
+
+        if not climb_in_progress:
+            if avg_grad_ahead > AVG_GRADIENT_START_THRESHOLD and current_grad > CURRENT_GRADIENT_START_THRESHOLD:
+                start_idx = i
+                climb_in_progress = True
+                i += 1
+                continue
+        else:
+            if avg_grad_ahead < AVG_GRADIENT_END_THRESHOLD and current_grad < CURRENT_GRADIENT_END_THRESHOLD:
+                end_idx = i
+                elev_gain = df.loc[end_idx, 'Altitude'] - df.loc[start_idx, 'Altitude']
+                if elev_gain >= MIN_ELEV_GAIN:
+                    climbs.append({'start': start_idx, 'end': end_idx})
+                climb_in_progress = False
+                start_idx = None
+        i += 1
+
+    # Merge climbs if combined avg gradient > threshold
+    merged_climbs = []
+    if climbs:
+        current = climbs[0]
+        for next_climb in climbs[1:]:
+            total_dist = df.loc[next_climb['end'], 'DistanceMeters'] - df.loc[current['start'], 'DistanceMeters']
+            total_elev = df.loc[next_climb['end'], 'Altitude'] - df.loc[current['start'], 'Altitude']
+            combined_grad = 100 * total_elev / total_dist if total_dist > 0 else 0
+            if combined_grad > MERGE_GRADIENT_THRESHOLD:
+                current['end'] = next_climb['end']
+            else:
+                merged_climbs.append(current)
+                current = next_climb
+        merged_climbs.append(current)
+
+    for climb in merged_climbs:
+        logging.debug(f"[Climb] Start: {climb['start']} End: {climb['end']}")
+
+    # ---- COURSEPOINTS ----
     coursepoints = []
 
+    for climb in merged_climbs:
+        start_idx = climb['start']
+        end_idx = climb['end']
+        start_distance = df.loc[start_idx, 'DistanceMeters']
+        end_distance = df.loc[end_idx, 'DistanceMeters']
+
+        # Climb start marker
+        lat = df.loc[start_idx, 'Latitude']
+        lon = df.loc[start_idx, 'Longitude']
+        point_data = (
+                    "Climb Start",
+                    lat,
+                    lon,
+                    "Continue",
+                    "Climb Start",
+                    start_idx
+                    )
+        coursepoints.append(point_data)
+
+        i = start_idx
+        next_marker = start_distance + CLIMB_NOTIFY_DISTANCE
+        while i <= end_idx:
+            current_distance = df.loc[i, 'DistanceMeters']
+            if current_distance >= next_marker or i == start_idx:
+                lat = df.loc[i, 'Latitude']
+                lon = df.loc[i, 'Longitude']
+                remaining = end_distance - current_distance
+                label = f"Climb: {remaining:.0f}m to go"
+                point_data = (
+                    label,
+                    lat,
+                    lon,
+                    "Continue",
+                    label,
+                    i
+                    )
+                coursepoints.append((point_data))
+                next_marker += CLIMB_NOTIFY_DISTANCE
+            i += 1
+        
+        # Climb end marker
+        lat = df.loc[end_idx, 'Latitude']
+        lon = df.loc[end_idx, 'Longitude']
+        point_data = (
+                    "Climb End",
+                    lat,
+                    lon,
+                    "Continue",
+                    "Climb End",
+                    end_idx
+                    )
+        coursepoints.append(point_data)
+
+
     last_trackpoint = 0
-    for cp in root.findall(".//ns:CoursePoint", ns):
+    for cp in root.findall(".//ns:CoursePoint", NAMESPACE):
 
         trackpoint = 0
-        name = cp.find("ns:Name", ns)
-        lat = cp.find("ns:Position/ns:LatitudeDegrees", ns)
-        lon = cp.find("ns:Position/ns:LongitudeDegrees", ns)
-        typ = cp.find("ns:PointType", ns)
-        notes = cp.find("ns:Notes", ns)
+        name = cp.find("ns:Name", NAMESPACE)
+        lat = cp.find("ns:Position/ns:LatitudeDegrees", NAMESPACE)
+        lon = cp.find("ns:Position/ns:LongitudeDegrees", NAMESPACE)
+        typ = cp.find("ns:PointType", NAMESPACE)
+        notes = cp.find("ns:Notes", NAMESPACE)
 
         # Use empty string if the tag is missing or the text is None
         name_text = name.text.strip() if name is not None and name.text else ""
@@ -149,10 +276,8 @@ def extract_trackpoints_coursepoints(xml):
         lon_val = float(lon.text)
 
         for idx, tp in enumerate(trackpoints[last_trackpoint:]):
-            dist = geodesic((lat_val, lon_val), tp).meters
+            dist = geodesic((lat_val, lon_val), (tp[0],tp[1])).meters
             if dist <= TRACKPOINT_COURSEPOINT_THRESHOLD:
-                logging.debug(
-                    f"[Matched Trackpoint] [{last_trackpoint + idx}] Dist: {dist}")
                 last_trackpoint += idx
                 trackpoint = last_trackpoint
                 break
@@ -181,7 +306,7 @@ def encode_polyline(points):
     encoded.extend(struct.pack('<i', lon0))
     last_lat, last_lon = lat0, lon0
 
-    for lat, lon in points[1:]:
+    for lat, lon, _ in points[1:]:
         ilat = int(lat * scale)
         ilon = int(lon * scale)
         dlat = ilat - last_lat

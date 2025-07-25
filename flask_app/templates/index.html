@@ -29,12 +29,13 @@
           <input type="hidden" id="ne_lon" name="ne_lon" required />
           <h3>Tiles to download</h3>
           <p><span id="tileCount">0</span></p>
-          <button id="downloadTilesBtn" type="submit" disabled>Download</button>
+          <button id="getTilesButton" type="submit" disabled>Get Tiles</button>
           <div id="progressContainer">
             <div id="progressBar"></div>
             <span id="progressText">Awaiting tile selection...</span>
           </div>
         </form>
+        <button id="downloadTilesButton" type="submit" disabled>Download Zip</button>
       </div>
 
       <div class="card">
@@ -91,9 +92,10 @@
       document.getElementById("ne_lat").value = ne.lat.toFixed(6);
       document.getElementById("ne_lon").value = ne.lng.toFixed(6);
 
-      let latStep = 0.1,
-        lonStep = 0.2,
+      let latStep = 10 / 111,
         overlap = 0.01;
+      let lonStep = 10 / (111 * Math.cos(sw.lat * Math.PI / 180))
+
       let tileCount = 0;
       for (let lat = sw.lat; lat < ne.lat; lat += latStep) {
         for (let lon = sw.lng; lon < ne.lng; lon += lonStep) {
@@ -109,11 +111,9 @@
       }
 
       document.getElementById("tileCount").innerText = tileCount;
-      document.getElementById("downloadTilesBtn").disabled = tileCount === 0;
+      document.getElementById("getTilesButton").disabled = tileCount === 0;
     });
-  </script>
 
-  <script>
     //route script
     const fileInput = document.getElementById("fileInput");
     const status = document.getElementById("status");
@@ -129,8 +129,6 @@
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
       if (!file) return;
-
-      status.textContent = "Uploading & processing…";
 
       const formData = new FormData();
       formData.append("file", file);
@@ -164,12 +162,11 @@
       data.coursepoints.forEach((pt) => {
         const marker = L.marker([pt.lat, pt.lon])
           .addTo(map)
-          .bindPopup(pt.label || "Point");
+          .bindPopup(pt.type + ": " + (pt.label || "Continue"));
         currentMarkers.push(marker);
       });
     });
-  </script>
-  <script>
+
     document.getElementById("folderPicker").addEventListener("change", function (e) {
       const files = Array.from(e.target.files);
       const lzmFiles = files.filter((f) => f.name.endsWith(".lzm"));
@@ -196,9 +193,7 @@
         }
       });
     });
-  </script>
 
-  <script>
     let progressEventSource = null;
 
     function startProgressListener() {
@@ -206,40 +201,77 @@
         progressEventSource.close();
       }
 
-      progressEventSource = new EventSource("/progress");
+      const sw_lat = document.getElementById("sw_lat").value;
+      const sw_lon = document.getElementById("sw_lon").value;
+      const ne_lat = document.getElementById("ne_lat").value;
+      const ne_lon = document.getElementById("ne_lon").value;
+
+      const progressUrl = `/progress?sw_lat=${sw_lat}&sw_lon=${sw_lon}&ne_lat=${ne_lat}&ne_lon=${ne_lon}`;
+      progressEventSource = new EventSource(progressUrl);
 
       progressEventSource.onmessage = function (e) {
-        const [done, total, thread] = e.data.split("/").map(Number);
-        const percent = total > 0 ? Math.floor((done / total) * 100) : 0;
+        let data;
+        try {
+          data = JSON.parse(e.data);
+        } catch (err) {
+          console.error("Invalid JSON from progress:", e.data);
+          return;
+        }
 
-        if (done != 0 && total != 0) {
+        const { completed, total, ready, size } = data;
+        const percent = total > 0 ? Math.floor((completed / total) * 100) : 0;
+
+        console.log(`Progress: ${completed}/${total}, Ready: ${ready}, Size: ${size}`);
+
+        if (completed !== 0 && total !== 0) {
           document.getElementById("progressBar").style.width = `${percent}%`;
           document.getElementById("progressText").textContent = `Progress: ${percent}%`;
+          document.getElementById("downloadTilesButton").disabled = true;
         }
 
-        if (done === total && done != 0 && total != 0  && thread == 0) {
-          document.getElementById("progressText").textContent = `✅ Done`;
-          document.getElementById("downloadTilesBtn").disabled = false;
-          document.getElementById("downloadTilesBtn").innerHTML = "Download";
-          window.location.href = "/download_zip";
+        if (completed === total && total !== 0 && ready && size == 0) {
+          document.getElementById("progressBar").style.width = `${percent}%`;
+          document.getElementById("progressText").textContent = `Preparing Zip File...`;
+          document.getElementById("downloadTilesButton").disabled = true;
         }
+
+        if (completed === total && total !== 0 && ready && size > 0) {
+          document.getElementById("progressBar").style.width = `100%`;
+          document.getElementById("progressText").textContent = `✅ Done`;
+          document.getElementById("getTilesButton").disabled = false;
+          document.getElementById("downloadTilesButton").disabled = false;
+          document.getElementById("getTilesButton").innerHTML = "Get Tiles";
+          downloadTilesButton.onclick = function () {
+            const downloadUrl = `/download_zip?sw_lat=${sw_lat}&sw_lon=${sw_lon}&ne_lat=${ne_lat}&ne_lon=${ne_lon}`;
+            window.location.href = downloadUrl;
+            document.getElementById("downloadTilesButton").disabled = true;
+          };
+        }
+      };
+
+      progressEventSource.onerror = function (e) {
+        console.error("Progress SSE error:", e);
       };
     }
 
     document.getElementById("downloadForm").addEventListener("submit", function (e) {
       e.preventDefault();
 
-      startProgressListener()
-      // Reset progress bar
-      document.getElementById("downloadTilesBtn").disabled = true;
-      document.getElementById("downloadTilesBtn").innerHTML = "Downloading Tiles...";
+      // Reset progress UI
+      document.getElementById("getTilesButton").disabled = true;
+      document.getElementById("getTilesButton").innerHTML = "Downloading Tiles...";
       document.getElementById("progressBar").style.width = `0%`;
       document.getElementById("progressText").textContent = `Progress: 0%`;
+
       const form = e.target;
       const data = new FormData(form);
 
-      fetch("/download", { method: "POST", body: data })
+      fetch("/download", {
+        method: "POST",
+        body: data,
+      });
 
+      startProgressListener();
     });
   </script>
 </html>
