@@ -46,14 +46,14 @@ import pandas as pd
 
 
 # --- Constants ---
-AVG_GRADIENT_START_THRESHOLD = 0      # % average gradient required to start
+AVG_GRADIENT_START_THRESHOLD = 2      # % average gradient required to start
 CURRENT_GRADIENT_START_THRESHOLD = 0  # % current gradient required to start
 AVG_GRADIENT_END_THRESHOLD = 0        # % average gradient to end (typically < 0)
 CURRENT_GRADIENT_END_THRESHOLD = 0    # % current gradient to end (typically < 0)
-CLIMB_NOTIFY_DISTANCE = 200              # meters to look ahead for gradient averaging
-LOOKAHEAD_DISTANCE = 200              # meters to look ahead for gradient averaging
+CLIMB_NOTIFY_DISTANCE = 300           # how often to add climb marker after start
+LOOKAHEAD_DISTANCE = 100              # meters to look ahead for gradient averaging
 MERGE_GRADIENT_THRESHOLD = 3          # % minimum avg gradient required to merge climbs
-MIN_ELEV_GAIN = 50                    # meters: minimum elevation gain to qualify
+MIN_ELEV_GAIN = 15                    # meters: minimum elevation gain to qualify
 LAT_LNG_SCALE = 1.1930464             # Coordinate scaling constant specific to Lezyne format
 TRACKPOINT_COURSEPOINT_THRESHOLD = 2  # Distance in meters to match coursepoint to a trackpint
 NAMESPACE = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"} # Namespace for parsing TCX
@@ -217,23 +217,25 @@ def extract_trackpoints_coursepoints(xml):
     for climb in merged_climbs:
         start_idx = climb['start']
         end_idx = climb['end']
+        climb_elev = df.loc[end_idx, 'Altitude'] - df.loc[start_idx, 'Altitude']
         start_distance = df.loc[start_idx, 'DistanceMeters']
         end_distance = df.loc[end_idx, 'DistanceMeters']
 
         # Climb start marker
         lat = df.loc[start_idx, 'Latitude']
         lon = df.loc[start_idx, 'Longitude']
+        label = f"Climb Start {((end_distance-start_distance)/1000):.1f}km {climb_elev:.0f}m Ele"
         point_data = (
-                    "Climb Start",
+                    label,
                     lat,
                     lon,
                     "Continue",
-                    "Climb Start",
+                    label,
                     start_idx
                     )
         coursepoints.append(point_data)
 
-        i = start_idx
+        i = start_idx + 1
         next_marker = start_distance + CLIMB_NOTIFY_DISTANCE
         while i <= end_idx:
             trackpoints[i][4] = True
@@ -241,8 +243,8 @@ def extract_trackpoints_coursepoints(xml):
             if current_distance >= next_marker or i == start_idx:
                 lat = df.loc[i, 'Latitude']
                 lon = df.loc[i, 'Longitude']
-                remaining = end_distance - current_distance
-                label = f"Climb: {remaining:.0f}m to go"
+                remaining = (end_distance - current_distance)/1000
+                label = f"Climb: {remaining:.1f}km to go"
                 point_data = (
                     label,
                     lat,

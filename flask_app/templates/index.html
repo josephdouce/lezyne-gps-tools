@@ -16,8 +16,8 @@
         <form action="/get_lzr" method="post" enctype="multipart/form-data" id="lzrForm">
           <label for="fileInput" class="custom-file-label">Choose TCX File</label>
           <input id="fileInput" type="file" name="file" accept=".tcx" required />
-          <p id="status">Waiting for file<span id="dots"></span></p>
           <button id="downloadLzrBtn" type="submit" disabled>Download .lzr</button>
+          <p id="status">Waiting for file<span id="dots"></span></p>
         </form>
       </div>
 
@@ -27,28 +27,41 @@
           <input type="hidden" id="sw_lon" name="sw_lon" required />
           <input type="hidden" id="ne_lat" name="ne_lat" required />
           <input type="hidden" id="ne_lon" name="ne_lon" required />
-          <h3>Tiles to download</h3>
-          <p><span id="tileCount">0</span></p>
           <button id="getTilesButton" type="submit" disabled>Get Tiles</button>
+          <button id="downloadTilesButton" type="button" disabled>Download Zip</button>
+          <label for="folderPicker" class="custom-file-label">Select Maps Folder</label>
+          <input type="file" id="folderPicker" webkitdirectory multiple />
           <div id="progressContainer">
             <div id="progressBar"></div>
             <span id="progressText">Awaiting tile selection...</span>
           </div>
         </form>
-        <button id="downloadTilesButton" type="submit" disabled>Download Zip</button>
-      </div>
-
-      <div class="card">
-        <label for="folderPicker" class="custom-file-label">Select Maps Folder</label>
-        <input type="file" id="folderPicker" webkitdirectory multiple />
       </div>
     </div>
 
     <div id="mapTitle">Select Area to Download Map Tiles</div>
     <div id="map"></div>
 
-    <div id="elevationBarContainer">
-      <canvas id="elevationBar"></canvas>
+    <div id="elevationBarContainer" style="position: relative; height: 200px">
+      <canvas id="elevationBar" style="width: 100%; height: 100%"></canvas>
+      <div
+        style="
+          position: absolute;
+          top: 5px;
+          right: 10px;
+          background: rgba(255, 255, 255, 0.8);
+          padding: 4px 6px;
+          font-size: 12px;
+          border-radius: 4px;
+          box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+          line-height: 1.4;
+        "
+      >
+        <span style="color: green">■</span> <span style="margin-right: 8px">Mild (&lt;3%)</span>
+        <span style="color: yellow">■</span> <span style="margin-right: 8px">Moderate (3–6%)</span>
+        <span style="color: orange">■</span> <span style="margin-right: 8px">Steep (6–9%)</span>
+        <span style="color: red">■</span> Very Steep (&gt;9%)
+      </div>
     </div>
   </body>
   <script>
@@ -114,7 +127,7 @@
         }
       }
 
-      document.getElementById("tileCount").innerText = tileCount;
+      document.getElementById("getTilesButton").innerText = "Get Tiles (" + tileCount + ")";
       document.getElementById("getTilesButton").disabled = tileCount === 0;
     });
 
@@ -132,22 +145,70 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      const paddingLeft = 40;
+      const paddingBottom = 20;
+
+      const drawWidth = canvas.width - paddingLeft;
+      const drawHeight = canvas.height - paddingBottom;
+
       const maxElev = Math.max(...trackpoints.map((pt) => pt.alt));
       const minElev = Math.min(...trackpoints.map((pt) => pt.alt));
       const totalDist = trackpoints[trackpoints.length - 1].distance;
 
       trackpoints.forEach((pt, i) => {
-        const x = (pt.distance / totalDist) * canvas.width;
+        const x = paddingLeft + (pt.distance / totalDist) * drawWidth;
         const next = trackpoints[i + 1] || pt;
-        const nextX = (next.distance / totalDist) * canvas.width;
+        const nextX = paddingLeft + (next.distance / totalDist) * drawWidth;
         const width = nextX - x;
 
-        const height = ((pt.alt - minElev) / (maxElev - minElev)) * canvas.height;
-        const y = canvas.height - height;
+        const height = ((pt.alt - minElev) / (maxElev - minElev)) * drawHeight;
+        const y = drawHeight - height;
 
-        ctx.fillStyle = pt.climb ? "red" : "#aaa";
+        // Default color
+        let color = "#aaa";
+
+        if (pt.climb) {
+          const dx = next.distance - pt.distance;
+          const dy = next.alt - pt.alt;
+          const gradient = dx > 0 ? (dy / dx) * 100 : 0;
+
+          if (gradient > 9) color = "red";
+          else if (gradient > 6) color = "orange";
+          else if (gradient > 3) color = "yellow";
+          else color = "green"; // low gradient climb
+        }
+
+        ctx.fillStyle = color;
         ctx.fillRect(x, y, Math.max(width, 1), height);
       });
+
+      // Axis lines
+      ctx.strokeStyle = "#333";
+      ctx.beginPath();
+      ctx.moveTo(paddingLeft, 0);
+      ctx.lineTo(paddingLeft, drawHeight);
+      ctx.lineTo(canvas.width, drawHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = "#000";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "right";
+
+      // Y-axis labels (Altitude)
+      const step = 5;
+      for (let i = 0; i <= step - 1; i++) {
+        const elev = minElev + ((maxElev - minElev) * i) / step;
+        const y = drawHeight - (i / step) * drawHeight;
+        ctx.fillText(`${Math.round(elev)}m`, paddingLeft - 5, y + 4);
+      }
+
+      // X-axis labels (Distance)
+      ctx.textAlign = "center";
+      const maxKm = Math.ceil(totalDist / 10000) * 10000; // round up to nearest 10k meters
+      for (let km = 0; km <= maxKm; km += 10000) {
+        const x = paddingLeft + (km / totalDist) * drawWidth;
+        ctx.fillText(`${km / 1000} km`, x, drawHeight + 15);
+      }
     }
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
