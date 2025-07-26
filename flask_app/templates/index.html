@@ -46,6 +46,10 @@
 
     <div id="mapTitle">Select Area to Download Map Tiles</div>
     <div id="map"></div>
+
+    <div id="elevationBarContainer">
+      <canvas id="elevationBar"></canvas>
+    </div>
   </body>
   <script>
     // map tiles script
@@ -87,14 +91,14 @@
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
 
-      document.getElementById("sw_lat").value = sw.lat.toFixed(6);
-      document.getElementById("sw_lon").value = sw.lng.toFixed(6);
-      document.getElementById("ne_lat").value = ne.lat.toFixed(6);
-      document.getElementById("ne_lon").value = ne.lng.toFixed(6);
+      document.getElementById("sw_lat").value = sw.lat.toFixed(2);
+      document.getElementById("sw_lon").value = sw.lng.toFixed(2);
+      document.getElementById("ne_lat").value = ne.lat.toFixed(2);
+      document.getElementById("ne_lon").value = ne.lng.toFixed(2);
 
       let latStep = 10 / 111,
         overlap = 0.01;
-      let lonStep = 10 / (111 * Math.cos(sw.lat * Math.PI / 180))
+      let lonStep = 10 / (111 * Math.cos((sw.lat * Math.PI) / 180));
 
       let tileCount = 0;
       for (let lat = sw.lat; lat < ne.lat; lat += latStep) {
@@ -118,6 +122,33 @@
     const fileInput = document.getElementById("fileInput");
     const status = document.getElementById("status");
     const downloadBtn = document.getElementById("downloadLzrBtn");
+
+    function drawElevationBar(trackpoints) {
+      const canvas = document.getElementById("elevationBar");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const maxElev = Math.max(...trackpoints.map((pt) => pt.alt));
+      const minElev = Math.min(...trackpoints.map((pt) => pt.alt));
+      const totalDist = trackpoints[trackpoints.length - 1].distance;
+
+      trackpoints.forEach((pt, i) => {
+        const x = (pt.distance / totalDist) * canvas.width;
+        const next = trackpoints[i + 1] || pt;
+        const nextX = (next.distance / totalDist) * canvas.width;
+        const width = nextX - x;
+
+        const height = ((pt.alt - minElev) / (maxElev - minElev)) * canvas.height;
+        const y = canvas.height - height;
+
+        ctx.fillStyle = pt.climb ? "red" : "#aaa";
+        ctx.fillRect(x, y, Math.max(width, 1), height);
+      });
+    }
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap contributors",
@@ -165,6 +196,8 @@
           .bindPopup(pt.type + ": " + (pt.label || "Continue"));
         currentMarkers.push(marker);
       });
+
+      drawElevationBar(data.trackpoints);
     });
 
     document.getElementById("folderPicker").addEventListener("change", function (e) {

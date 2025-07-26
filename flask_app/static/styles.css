@@ -27,7 +27,7 @@ h1, h2, h3 {
 #map {
   display: flex;
   flex-direction: row;
-  height: 70vh;
+  height: 60vh;
   margin: 10px;
   border-radius: 10px;
   border: 1px solid #ccc;
@@ -178,4 +178,17 @@ input[type="file"] {
 
 .custom-file-label:hover {
   background-color: #004dcf;
+}
+
+#elevationBarContainer {
+  display: flex;
+  flex-direction: row;
+  height: 10vh;
+  margin: 10px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+}
+#elevationBar {
+  width: 100%;
+  height: 100%;
 }

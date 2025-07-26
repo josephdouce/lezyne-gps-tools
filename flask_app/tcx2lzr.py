@@ -123,28 +123,37 @@ def extract_trackpoints_coursepoints(xml):
 
     # ---- TRACKPOINTS----
     trackpoints = []
+    cumulative_distance = 0.0
+    previous_point = None
+    climb = False
 
-    for tp in root.findall(".//ns:Trackpoint", NAMESPACE):
-        lat = tp.find("ns:Position/ns:LatitudeDegrees",
-                      NAMESPACE)  # Find latitude element
-        lon = tp.find("ns:Position/ns:LongitudeDegrees",
-                      NAMESPACE)  # Find longitude element
+    for tp in root.findall('.//ns:Trackpoint', NAMESPACE):
+        lat = tp.find('ns:Position/ns:LatitudeDegrees', NAMESPACE)
+        lon = tp.find('ns:Position/ns:LongitudeDegrees', NAMESPACE)
         alt = tp.find('ns:AltitudeMeters', NAMESPACE)
 
         if lat is not None and lon is not None:
             lat_val = float(lat.text)
             lon_val = float(lon.text)
             alt_val = float(alt.text) if alt is not None else 0
-            # Add tuple (lat, lon) to list
-            trackpoints.append((lat_val, lon_val, alt_val))
-            logging.debug(f"[Trackpoint] Lat: {lat_val}, Lon: {lon_val}, Alt: {alt_val}")
+
+            if previous_point:
+                segment_distance = geodesic((previous_point[0], previous_point[1]), (lat_val, lon_val)).meters
+                cumulative_distance += segment_distance
+            else:
+                segment_distance = 0.0
+
+            # Add tuple (lat, lon, alt, cumulative_distance)
+            trackpoints.append(list((lat_val, lon_val, alt_val, cumulative_distance, climb)))
+            previous_point = (lat_val, lon_val)
+            logging.debug(f"[Trackpoint] Lat: {lat_val}, Lon: {lon_val}, Alt: {alt_val}, Distance: {cumulative_distance}, Climb: {climb}")
 
     logging.debug(
         # Summary
         f"[Trackpoint] Total: {len(trackpoints)} trackpoints extracted.")
     
     # ---- CLIMB DETECTION ----
-    df = pd.DataFrame(trackpoints, columns=["Latitude", "Longitude", "Altitude"])
+    df = pd.DataFrame(trackpoints, columns=["Latitude", "Longitude", "Altitude", "Distance","Climb"])
     df["Distance"] = [0] + [geodesic((trackpoints[i-1][0], trackpoints[i-1][1]), (trackpoints[i][0], trackpoints[i][1])).meters for i in range(1, len(trackpoints))]
     df["DistanceMeters"] = df["Distance"].cumsum()
     df['DistanceDiff'] = df['DistanceMeters'].diff().fillna(0)
@@ -203,6 +212,7 @@ def extract_trackpoints_coursepoints(xml):
 
     # ---- COURSEPOINTS ----
     coursepoints = []
+    trackpoints = list(trackpoints)
 
     for climb in merged_climbs:
         start_idx = climb['start']
@@ -226,6 +236,7 @@ def extract_trackpoints_coursepoints(xml):
         i = start_idx
         next_marker = start_distance + CLIMB_NOTIFY_DISTANCE
         while i <= end_idx:
+            trackpoints[i][4] = True
             current_distance = df.loc[i, 'DistanceMeters']
             if current_distance >= next_marker or i == start_idx:
                 lat = df.loc[i, 'Latitude']
@@ -306,7 +317,7 @@ def encode_polyline(points):
     encoded.extend(struct.pack('<i', lon0))
     last_lat, last_lon = lat0, lon0
 
-    for lat, lon, _ in points[1:]:
+    for lat, lon, _, _, _ in points[1:]:
         ilat = int(lat * scale)
         ilon = int(lon * scale)
         dlat = ilat - last_lat

@@ -7,6 +7,10 @@ LAT_STEP = 10/111
 OVERLAP = 0.01
 
 def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
+    sw_lat = round(sw_lat,2)
+    sw_lon = round(sw_lon,2)
+    ne_lat = round(ne_lat,2)
+    ne_lon = round(ne_lon,2)
     lon_step = 10 / (111 * math.cos(math.radians(sw_lat)))
     logging.debug(
         f"Generating tiles from SW=({sw_lat}, {sw_lon}) to NE=({ne_lat}, {ne_lon})")
@@ -16,10 +20,10 @@ def generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon):
     while lat < ne_lat:
         lon = sw_lon
         while lon < ne_lon:
-            tile_sw = {'lat': round(lat, 6), 'lon': round(lon, 6)}
+            tile_sw = {'lat': round(lat, 2), 'lon': round(lon, 2)}
             tile_ne = {
-                'lat': round(lat + LAT_STEP + OVERLAP, 6),
-                'lon': round(lon + lon_step + OVERLAP, 6)
+                'lat': round(lat + LAT_STEP + OVERLAP, 2),
+                'lon': round(lon + lon_step + OVERLAP, 2)
             }
 
             if not (

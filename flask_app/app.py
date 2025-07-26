@@ -23,6 +23,10 @@ class ZipManager:
         self.thread = None
 
     def build_zip(self, sw_lat, sw_lon, ne_lat, ne_lon):
+        sw_lat = round(sw_lat,2)
+        sw_lon = round(sw_lon,2)
+        ne_lat = round(ne_lat,2)
+        ne_lon = round(ne_lon,2)
         self.progress["completed"] = 0
         tiles = generate_tiles(sw_lat, sw_lon, ne_lat, ne_lon)
         self.progress["total"] = len(tiles) + 2
@@ -63,7 +67,7 @@ def get_track():
     _, trackpoints, coursepoints = convert_file(input_bytes)
 
     return jsonify({
-        "trackpoints": [{"lat": lat, "lon": lon} for lat, lon, _ in trackpoints],
+        "trackpoints": [{"lat": lat, "lon": lon, "alt": alt, "distance": dist, "climb":climb} for lat, lon, alt, dist, climb in trackpoints],
         "coursepoints": [
             {"lat": lat, "lon": lon, "label": notes or name, "type": typ}
             for name, lat, lon, typ, notes, _ in coursepoints
