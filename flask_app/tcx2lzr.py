@@ -46,14 +46,14 @@ import pandas as pd
 
 
 # --- Constants ---
-AVG_GRADIENT_START_THRESHOLD = 2      # % average gradient required to start
+AVG_GRADIENT_START_THRESHOLD = 3     # % average gradient required to start
 CURRENT_GRADIENT_START_THRESHOLD = 0  # % current gradient required to start
 AVG_GRADIENT_END_THRESHOLD = 0        # % average gradient to end (typically < 0)
 CURRENT_GRADIENT_END_THRESHOLD = 0    # % current gradient to end (typically < 0)
 CLIMB_NOTIFY_DISTANCE = 300           # how often to add climb marker after start
-LOOKAHEAD_DISTANCE = 100              # meters to look ahead for gradient averaging
+LOOKAHEAD_DISTANCE = 200               # meters to look ahead for gradient averaging
 MERGE_GRADIENT_THRESHOLD = 3          # % minimum avg gradient required to merge climbs
-MIN_ELEV_GAIN = 15                    # meters: minimum elevation gain to qualify
+MIN_ELEV_GAIN = 25                    # meters: minimum elevation gain to qualify
 LAT_LNG_SCALE = 1.1930464             # Coordinate scaling constant specific to Lezyne format
 TRACKPOINT_COURSEPOINT_THRESHOLD = 2  # Distance in meters to match coursepoint to a trackpint
 NAMESPACE = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"} # Namespace for parsing TCX
@@ -305,6 +305,8 @@ def extract_trackpoints_coursepoints(xml):
                 trackpoint
             )
             coursepoints.append(point_data)
+
+    coursepoints.sort(key=lambda coursepoints: coursepoints[5]) 
 
     return trackpoints, coursepoints
 
