@@ -33,7 +33,7 @@ COURSEPOINT STRUCTURE (Repeated N times):
 | Latitude            | 4      | int32    | Lezyne scaled                     |
 | Polyline Index      | 2      | uint16   | Ordinal number of point           |
 | Type                | 1      | uint8    | Based on predefined TYPE_CODES     |
-| Name Length         | 1      | uint8    | Length of Notes string (max 16)   |
+| Name Length         | 1      | uint8    | Length of Notes string (max 255)   |
 | Name/Notes Text     | var    | bytes    | UTF-8 encoded Notes string        |
 
 """
@@ -55,7 +55,7 @@ LOOKAHEAD_DISTANCE = 200               # meters to look ahead for gradient avera
 MERGE_GRADIENT_THRESHOLD = 3          # % minimum avg gradient required to merge climbs
 MIN_ELEV_GAIN = 25                    # meters: minimum elevation gain to qualify
 LAT_LNG_SCALE = 1.1930464             # Coordinate scaling constant specific to Lezyne format
-TRACKPOINT_COURSEPOINT_THRESHOLD = 2  # Distance in meters to match coursepoint to a trackpint
+TRACKPOINT_COURSEPOINT_THRESHOLD = 0  # Distance in meters to match coursepoint to a trackpint
 NAMESPACE = {"ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"} # Namespace for parsing TCX
 
 # CRC-16 lookup table
@@ -390,17 +390,20 @@ def convert_file(input_bytes):
 
     # Append each coursepoint as a structured binary block
     for (name, lat, lon, typ, notes, trackpoint) in coursepoints:
-        byte_array += lezyne_lat_lon_to_bytes(lon)  # Coursepoint longitude
-        byte_array += lezyne_lat_lon_to_bytes(lat)  # Coursepoint latitude
-        byte_array += int(trackpoint).to_bytes(2,
+        point_bytes = bytearray()
+        point_bytes += lezyne_lat_lon_to_bytes(lon)  # Coursepoint longitude
+        point_bytes += lezyne_lat_lon_to_bytes(lat)  # Coursepoint latitude
+        point_bytes += int(trackpoint).to_bytes(2,
                                                'little')  # Coursepoint index
-        byte_array += TYPE_CODES.get(typ, 0).to_bytes(1, 'little')  # Turn type
+        point_bytes += TYPE_CODES.get(typ, 0).to_bytes(1, 'little')  # Turn type
         notes_bytes = bytes(notes, "utf-8")
         notes_len = len(notes_bytes)
-        byte_array += notes_len.to_bytes(1, 'little')  # Length of notes
-        byte_array += notes_bytes  # Notes (used as label)
-        logging.debug(f"[Coursepoint] Name: {name}, Lat: {lat}, Lon: {lon}, "
-                      f"Type: {typ}, Notes: {notes} Trackpoint: {trackpoint} Length: {notes_len}")
+        point_bytes += notes_len.to_bytes(1, 'little')  # Length of notes
+        point_bytes += notes_bytes  # Notes (used as label)
+        byte_array += point_bytes
+        # convert the bytes back to text and display to confirm correct encoding
+        logging.debug(f"[Coursepoint] Name: {point_bytes[12:].decode('utf-8')[:10]}, Lat: {int.from_bytes(point_bytes[4:8], 'little')}, Lon: {int.from_bytes(point_bytes[0:4], 'little')}, "
+                      f"Type: {int.from_bytes(point_bytes[10:11], 'little')}, Notes: {point_bytes[12:].decode('utf-8')}, Trackpoint: {int.from_bytes(point_bytes[8:10], 'little')}, Length: {int.from_bytes(point_bytes[11:12], 'little')}")
 
     # Compute CRC and total file length
     data_for_crc = byte_array[:]
