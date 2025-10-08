@@ -5,7 +5,7 @@ Lezyne GPS devices.
 
 The main focus here is to generate .lzm files on your local machine and not
 have to use the gpsroot.com interface. This will give you better flexbility
-and all you to make custom maps for regions and areas.
+and allow you to make custom maps for regions and areas.
 
 ## Requirements
 
