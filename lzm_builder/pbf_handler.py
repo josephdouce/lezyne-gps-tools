@@ -41,6 +41,7 @@ class PBFHandler(osmium.SimpleHandler):
             ways_to_include: List to store processed ways
             keep_service: Whether to include service roads
             keep_sidewalks: Whether to include sidewalks
+            bbox_filter: Whether to filter based on bounding box
             verbose: Whether to print progress information
         """
         osmium.SimpleHandler.__init__(self)
