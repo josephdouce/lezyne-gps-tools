@@ -32,6 +32,12 @@ There is a test script included that will generate a .lzm file for a small area 
 python lzm_builder_test.py
 ```
 
+There is a second test that will use the extraction method.
+
+```bash
+python lzm_builder_extraction_test.py
+```
+
 ## Usage
 
 ```bash
