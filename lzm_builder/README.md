@@ -50,6 +50,10 @@ Your bbox coordinates should include data that is in your base map. Otherwise yo
 
 Once you have generated .lzm files you can copy them to your Lezyne GPS device and use them in the same way as maps downloaded from gpsroot.com. Copy the .lzm files to the `Maps/` directory on your device.
 
+## Extraction Method
+
+This is an alternative method to filter the .pbf file using the `osmium` command line tool. This method is much faster than using the `osmium` python library to filter the data. However it does require that you have the `osmium` cli tool installed on your system.
+
 ## Considerations
 
 If you intend to generate .lzm files for a small area of "Northern Italy" you should use a smaller regional base map that includes that area. If you use a base map for "Europe" or "World" it will take a lot longer to process.
