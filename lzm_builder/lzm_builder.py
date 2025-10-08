@@ -93,9 +93,6 @@ class GridTile:
     sizes: Dict[int, int] = field(default_factory=dict)
 
 
-# =============================================================================
-# PROCESSING CLASSES
-# =============================================================================
 
 class LZMBuilder:
     """
