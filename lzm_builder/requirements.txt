@@ -1,0 +1,11 @@
+# LZM Builder Requirements
+# 
+# Core dependencies for the Lezyne LZM map file builder
+#
+
+# Python bindings for Osmium library (OSM data processing)
+# Required for parsing PBF (Protocol Buffer Format) OpenStreetMap files
+osmium>=3.7.0
+
+# Note: Standard library modules used (no additional requirements):
+# - argparse, dataclasses, io, math, os, pathlib, struct, sys, time, typing
