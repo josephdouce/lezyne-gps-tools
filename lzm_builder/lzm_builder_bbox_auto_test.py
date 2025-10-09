@@ -42,9 +42,11 @@ def test_auto_bbox_detection():
     print(f"Bounding box: {bbox.south:.6f}, {bbox.west:.6f} (SW) to {bbox.north:.6f}, {bbox.east:.6f} (NE)")
     
     # Input and output files
-    source_pbf_file = Path(__file__).parent / "belgium_sample.osm.pbf"
-    extracted_pbf_file = Path(__file__).parent / f"belgium_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}_tk421.osm.pbf"
-    expected_lzm_file = f"mf_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}.lzm"
+    from lzm_utils import filename_from_bbox, script_dir
+    import os
+    source_pbf_file = os.path.join(script_dir(), "belgium_sample.osm.pbf")
+    extracted_pbf_file = filename_from_bbox(bbox, prefix="belgium", suffix="_tk421.osm.pbf", include_path=True)
+    expected_lzm_file = filename_from_bbox(bbox)
     lzm_file_path = None  # Track the generated file for cleanup
     
     print(f"Source PBF: {source_pbf_file}")
@@ -52,11 +54,11 @@ def test_auto_bbox_detection():
     print(f"Expected LZM output: {expected_lzm_file}")
     
     # Check source file exists
-    if not source_pbf_file.exists():
+    if not os.path.exists(source_pbf_file):
         print(f"❌ ERROR: Source file not found: {source_pbf_file}")
         return False
     
-    source_size = source_pbf_file.stat().st_size
+    source_size = os.path.getsize(source_pbf_file)
     print(f"✅ Source PBF file found ({source_size:,} bytes)")
     
     try:
@@ -70,7 +72,7 @@ def test_auto_bbox_detection():
             return False
         
         extract_time = time.time() - extract_start
-        extracted_size = extracted_pbf_file.stat().st_size
+        extracted_size = os.path.getsize(extracted_pbf_file)
         print(f"✅ Extraction complete in {extract_time:.2f} seconds")
         print(f"📁 Extracted PBF: {extracted_size:,} bytes")
         
@@ -82,7 +84,7 @@ def test_auto_bbox_detection():
         try:
             builder = LZMBuilder()
             lzm_file = builder.from_pbf(str(extracted_pbf_file), bbox="auto", verbose=True)
-            lzm_file_path = Path(lzm_file)  # Store for cleanup
+            lzm_file_path = lzm_file  # Store for cleanup
             
             generation_time = time.time() - generation_start
             print(f"✅ LZM file generated in {generation_time:.2f} seconds")
@@ -94,17 +96,18 @@ def test_auto_bbox_detection():
             traceback.print_exc()
             return False
         
-        # Step 3: Verify the output file
-        if not lzm_file_path.exists():
+        # Verify the output file
+        if not os.path.exists(lzm_file_path):
             print(f"❌ ERROR: Output LZM file not found: {lzm_file_path}")
             return False
         
-        lzm_size = lzm_file_path.stat().st_size
+        lzm_size = os.path.getsize(lzm_file_path)
         print(f"✅ LZM file created ({lzm_size:,} bytes)")
         
         # Step 4: Sanity checking
         print(f"\n🔍 Step 3: Performing sanity checks...")
-        test_result = perform_sanity_checks(lzm_file_path, bbox)
+        from pathlib import Path
+        test_result = perform_sanity_checks(Path(lzm_file_path), bbox)
         
         return test_result
         
@@ -112,16 +115,16 @@ def test_auto_bbox_detection():
         # Cleanup: Remove both the extracted PBF and generated LZM files
         cleanup_files = []
         
-        if extracted_pbf_file.exists():
+        if os.path.exists(extracted_pbf_file):
             cleanup_files.append(extracted_pbf_file)
         
-        if lzm_file_path and lzm_file_path.exists():
+        if lzm_file_path and os.path.exists(lzm_file_path):
             cleanup_files.append(lzm_file_path)
         
         for file_path in cleanup_files:
             try:
-                file_path.unlink()
-                print(f"🧹 Cleaned up test file: {file_path.name}")
+                os.remove(file_path)
+                print(f"🧹 Cleaned up test file: {os.path.basename(file_path)}")
             except OSError as e:
                 print(f"⚠️  Warning: Failed to remove test file {file_path}: {e}")
 

@@ -193,3 +193,47 @@ def pluck_bbox_from_filename(filename: str) -> 'BoundingBox':
             east: float
     
     return BoundingBox(north=maxlat, south=minlat, east=maxlon, west=minlon)
+
+def script_dir() -> str:
+    """Get the directory of the calling script.
+    
+    This utility function returns the absolute path to the directory containing
+    the script that calls this function. Useful for creating file paths relative
+    to the calling script's location.
+    
+    Returns:
+        Absolute path to the calling script's directory
+        
+    Example:
+        # In /path/to/my_script.py
+        dir_path = script_dir()  # Returns '/path/to'
+        file_path = os.path.join(script_dir(), 'data.txt')  # '/path/to/data.txt'
+    """
+    import os
+    import inspect
+    # Get the directory of the calling script
+    caller_frame = inspect.currentframe().f_back
+    caller_file = caller_frame.f_globals['__file__']
+    return os.path.dirname(os.path.abspath(caller_file))
+
+def filename_from_bbox(bbox: 'BoundingBox', prefix: str = 'mf', suffix: str = '.lzm', 
+                       include_path: bool = False) -> str:
+    """Generate a filename with embedded bounding box.
+    
+    Args:
+        bbox: BoundingBox with coordinates
+        prefix: Filename prefix (default: 'mf')
+        suffix: Filename suffix (default: '.lzm')
+        include_path: If True, prepend current script directory path
+        
+    Example outputs:
+        'mf_34.00_-118.50_34.50_-118.00.lzm'
+        '/path/to/script/dir/mf_34.00_-118.50_34.50_-118.00.lzm'
+    """
+    filename = f"{prefix}_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}{suffix}"
+    
+    if include_path:
+        import os
+        return os.path.join(script_dir(), filename)
+    
+    return filename

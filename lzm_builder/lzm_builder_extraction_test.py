@@ -39,19 +39,21 @@ def test_signal_du_botrange():
     print(f"Bounding box: {bbox.south:.6f}, {bbox.west:.6f} (SW) to {bbox.north:.6f}, {bbox.east:.6f} (NE)")
     
     # Input and output files
-    pbf_file = Path(__file__).parent / "belgium_sample.osm.pbf"
-    expected_lzm_file = f"mf_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}.lzm"
+    from lzm_utils import filename_from_bbox, script_dir
+    import os
+    pbf_file = os.path.join(script_dir(), "belgium_sample.osm.pbf")
+    expected_lzm_file = filename_from_bbox(bbox)
     lzm_file_path = None  # Track the generated file for cleanup
     
     print(f"Input PBF: {pbf_file}")
     print(f"Expected output: {expected_lzm_file}")
     
     # Check input file exists
-    if not pbf_file.exists():
+    if not os.path.exists(pbf_file):
         print(f"❌ ERROR: Input file not found: {pbf_file}")
         return False
     
-    pbf_size = pbf_file.stat().st_size
+    pbf_size = os.path.getsize(pbf_file)
     print(f"✅ Input PBF file found ({pbf_size:,} bytes)")
     
     # Generate LZM file
@@ -61,8 +63,8 @@ def test_signal_du_botrange():
     try:
         try:
             builder = LZMBuilder()
-            lzm_file = builder.from_pbf(str(pbf_file), bbox, extraction=True, verbose=True)
-            lzm_file_path = Path(lzm_file)  # Store for cleanup
+            lzm_file = builder.from_pbf(pbf_file, bbox, extraction=True, verbose=True)
+            lzm_file_path = lzm_file  # Store for cleanup
             
             generation_time = time.time() - start_time
             print(f"✅ LZM file generated in {generation_time:.2f} seconds")
@@ -75,25 +77,26 @@ def test_signal_du_botrange():
             return False
         
         # Verify the output file
-        if not lzm_file_path.exists():
+        if not os.path.exists(lzm_file_path):
             print(f"❌ ERROR: Output LZM file not found: {lzm_file_path}")
             return False
         
-        lzm_size = lzm_file_path.stat().st_size
+        lzm_size = os.path.getsize(lzm_file_path)
         print(f"✅ LZM file created ({lzm_size:,} bytes)")
         
         # Sanity checking
         print("\n🔍 Performing sanity checks...")
-        test_result = perform_sanity_checks(lzm_file_path, bbox)
+        from pathlib import Path
+        test_result = perform_sanity_checks(Path(lzm_file_path), bbox)
         
         return test_result
         
     finally:
         # Cleanup: Remove the generated LZM file
-        if lzm_file_path and lzm_file_path.exists():
+        if lzm_file_path and os.path.exists(lzm_file_path):
             try:
-                lzm_file_path.unlink()
-                print(f"🧹 Cleaned up test file: {lzm_file_path.name}")
+                os.remove(lzm_file_path)
+                print(f"🧹 Cleaned up test file: {os.path.basename(lzm_file_path)}")
             except OSError as e:
                 print(f"⚠️  Warning: Failed to remove test file {lzm_file_path}: {e}")
 

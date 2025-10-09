@@ -151,10 +151,9 @@ class LZMBuilder:
         """
         from lzm_utils import extract_smaller_pbf_from_larger_pbf
 
-        extracted_pbf_file = os.path.join(
-            os.getcwd(),
-            f"extracted_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}.osm.pbf"
-        )
+        from lzm_utils import filename_from_bbox
+        
+        extracted_pbf_file = filename_from_bbox(bbox, prefix="extracted", suffix=".osm.pbf", include_path=True)
 
         if verbose:
             print(f"⏱️  Extracting smaller PBF to {extracted_pbf_file}...")
@@ -301,7 +300,8 @@ class LZMBuilder:
             print(f"⏱️  Phase 5: Writing LZM file...")
             phase5_start = time.time()
 
-        outname = f"mf_{south:.2f}_{west:.2f}_{north:.2f}_{east:.2f}.lzm"
+        from lzm_utils import filename_from_bbox
+        outname = filename_from_bbox(bbox)
         
         with open(outname, "wb") as out:
             # Write using same format as working files
