@@ -2,19 +2,19 @@
 Lezyne LZM Map Builder
 
 Generates Lezyne LZM offline map files from OpenStreetMap data.
-Supports PBF as the base input map data.
+Supports OSM files (.pbf and .osm) as the base input map data.
 
 Example usage:
     # Class interface
     builder = LZMBuilder()
     bbox = BoundingBox(50.92, 4.80, 50.97, 4.85)
-    lzm_file = builder.from_pbf("map.osm.pbf", bbox, verbose=True)
+    lzm_file = builder.from_osm("map.osm.pbf", bbox, verbose=True)
     
     # Function interface
     lzm_file = build_lzm_from_pbf_with_auto_bbox("map.osm.pbf", bbox, verbose=True)
     
     # Command line
-    python lzm_builder.py --pbf map.osm.pbf --bbox 50.92,4.80,50.97,4.85 --verbose
+    python lzm_builder.py --osm map.osm.pbf --bbox 50.92,4.80,50.97,4.85 --verbose
 """
 
 import argparse
@@ -33,7 +33,7 @@ from lzm_utils import (
 from lzm_constants import (
     GROUP_ORDER,
 )
-from pbf_handler import PBFHandler
+from osm_handler import OSMHandler
 
 
 # =============================================================================
@@ -80,22 +80,22 @@ class LZMBuilder:
     LZM file generator for Lezyne GPS devices
     
     This class orchestrates generating LZM map files
-    from OpenStreetMap PBF data.
+    from OpenStreetMap data.
     """
     
     def __init__(self):
         """Initialize LZM builder"""
         pass
         
-    def from_pbf(self, pbf_path: str, bbox: BoundingBox | str = "auto", 
+    def from_osm(self, osm_path: str, bbox: BoundingBox | str = "auto", 
                  keep_service: bool = False, keep_sidewalks: bool = False,
                  extraction: bool = False, epsilon: float = 0.00002, opt_level: int = 2,
                  verbose: bool = False) -> str:
         """
-        Generate LZM file from OSM PBF data - Main public interface
+        Generate LZM file from OSM data - Main public interface
         
         Args:
-            pbf_path: Path to OSM PBF file
+            osm_path: Path to OSM file (.pbf or .osm)
             bbox: Geographic bounding box or "auto" to extract from filename
             keep_service: Include service roads
             keep_sidewalks: Include sidewalks
@@ -109,41 +109,41 @@ class LZMBuilder:
         """
         # Handle auto bbox detection
         if isinstance(bbox, str) and bbox == "auto":
-            return self._from_pbf_with_auto_bbox(pbf_path, keep_service, keep_sidewalks,
+            return self._from_osm_with_auto_bbox(osm_path, keep_service, keep_sidewalks,
                                                extraction, epsilon, opt_level, verbose)
         
         # Handle extraction method
         if extraction:
-            return self._build_lzm_from_extracted_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
+            return self._build_lzm_from_osm_with_extraction(osm_path, bbox, keep_service, keep_sidewalks,
                                                      epsilon, opt_level, verbose)
         
         # Direct build
-        return self._build_lzm_from_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
+        return self._build_lzm_from_osm(osm_path, bbox, keep_service, keep_sidewalks,
                                        bbox_filtering=True, epsilon=epsilon, 
                                        opt_level=opt_level, verbose=verbose)
     
-    def _from_pbf_with_auto_bbox(self, pbf_path: str,
+    def _from_osm_with_auto_bbox(self, osm_path: str,
                                 keep_service: bool, keep_sidewalks: bool,
                                 extraction: bool, epsilon: float, opt_level: int, verbose: bool) -> str:
         """
         Convenience method that handles auto bbox detection from filename
         """
         if extraction:
-            raise ValueError("Cannot use extraction method with bbox='auto'. Auto mode processes the whole PBF file, making extraction redundant.")
+            raise ValueError("Cannot use extraction method with bbox='auto'. Auto mode processes the whole OSM file, making extraction redundant.")
         
         try:
-            bbox = pluck_bbox_from_filename(pbf_path)
+            bbox = pluck_bbox_from_filename(osm_path)
             if verbose:
                 print(f"Auto-detected bbox from filename: {bbox}")
         except ValueError as e:
-            raise ValueError(f"Cannot auto-detect bounding box from filename '{pbf_path}': {e}")
+            raise ValueError(f"Cannot auto-detect bounding box from filename '{osm_path}': {e}")
         
-        # Call the core build method with no bbox filtering (process whole PBF)
-        return self._build_lzm_from_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
+        # Call the core build method with no bbox filtering (process whole OSM file)
+        return self._build_lzm_from_osm(osm_path, bbox, keep_service, keep_sidewalks,
                                        bbox_filtering=False, epsilon=epsilon,
                                        opt_level=opt_level, verbose=verbose)
 
-    def _build_lzm_from_extracted_pbf(self, pbf_path: str, bbox: BoundingBox,
+    def _build_lzm_from_osm_with_extraction(self, osm_path: str, bbox: BoundingBox,
                                      keep_service: bool, keep_sidewalks: bool,
                                      epsilon: float, opt_level: int, verbose: bool) -> str:
         """
@@ -159,7 +159,7 @@ class LZMBuilder:
             print(f"⏱️  Extracting smaller PBF to {extracted_pbf_file}...")
             extract_start = time.time()
         
-        success = extract_smaller_pbf_from_larger_pbf(pbf_path, extracted_pbf_file, bbox)
+        success = extract_smaller_pbf_from_larger_pbf(osm_path, extracted_pbf_file, bbox)
         if not success:
             raise RuntimeError("Failed to extract smaller PBF")
         
@@ -170,7 +170,7 @@ class LZMBuilder:
             print(f"⏱️  Building LZM from extracted PBF...")
             
         # Call the core build method with no bbox filtering (extracted PBF is already filtered)
-        outname = self._build_lzm_from_pbf(extracted_pbf_file, bbox, keep_service, keep_sidewalks,
+        outname = self._build_lzm_from_osm(extracted_pbf_file, bbox, keep_service, keep_sidewalks,
                                          bbox_filtering=False, epsilon=epsilon,
                                          opt_level=opt_level, verbose=verbose)
         
@@ -184,10 +184,10 @@ class LZMBuilder:
         
         return outname
 
-    def _build_lzm_from_pbf(self, pbf_path: str, bbox: BoundingBox,
+    def _build_lzm_from_osm(self, osm_path: str, bbox: BoundingBox,
                           keep_service: bool, keep_sidewalks: bool, bbox_filtering: bool,
                           epsilon: float, opt_level: int, verbose: bool) -> str:
-        """Generate LZM file directly from PBF file"""
+        """Generate LZM file directly from OSM file"""
         # Import here to avoid circular imports
         from lzm_processing import add_way_to_polylines, compress_polylines
         
@@ -201,12 +201,12 @@ class LZMBuilder:
         
         # Phase 1: Parse PBF file
         if verbose: 
-            print(f"⏱️  Phase 1: Parsing PBF file...")
+            print(f"⏱️  Phase 1: Parsing OSM file...")
             phase1_start = time.time()
 
-        handler = PBFHandler(bbox, bbox_buffer, nodes, ways_to_include, bbox_filtering,
+        handler = OSMHandler(bbox, bbox_buffer, nodes, ways_to_include, bbox_filtering,
                             keep_service, keep_sidewalks, verbose)
-        handler.apply_file(pbf_path)
+        handler.apply_file(osm_path)
         
         if verbose:
             phase1_time = time.time() - phase1_start
@@ -382,7 +382,7 @@ def main():
     """Command line interface for the LZM builder."""
     ap = argparse.ArgumentParser(description="Build LZM from PBF")
 
-    ap.add_argument("--pbf", required=True, help="Path to input .pbf file")
+    ap.add_argument("--osm", required=True, help="Path to input OSM file (.pbf or .osm)")
     ap.add_argument("--bbox", required=True, help="south,west,north,east (decimal degrees) OR 'auto' to extract from pbf filename")
     ap.add_argument("--keep-service", action="store_true", help="Keep service roads")
     ap.add_argument("--keep-sidewalks", action="store_true", help="Keep sidewalks")
@@ -400,9 +400,9 @@ def main():
         s, w, n, e = map(float, args.bbox.split(","))
         bbox = BoundingBox(s, w, n, e)
     
-    if args.pbf:
+    if args.osm:
         builder = LZMBuilder()
-        outname = builder.from_pbf(args.pbf, bbox, args.keep_service, args.keep_sidewalks,
+        outname = builder.from_osm(args.osm, bbox, args.keep_service, args.keep_sidewalks,
                                   args.extraction, args.epsilon, args.opt, args.verbose)
         print(f"Generated: {outname}")
 

@@ -63,7 +63,7 @@ def test_signal_du_botrange():
     try:
         try:
             builder = LZMBuilder()
-            lzm_file = builder.from_pbf(pbf_file, bbox, extraction=True, verbose=True)
+            lzm_file = builder.from_osm(pbf_file, bbox, extraction=True, verbose=True)
             lzm_file_path = lzm_file  # Store for cleanup
             
             generation_time = time.time() - start_time

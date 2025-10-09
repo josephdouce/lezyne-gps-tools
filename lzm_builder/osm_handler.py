@@ -1,30 +1,31 @@
 """
-PBF Handler Service
+OSM Handler Service
 
-This service handles parsing of OpenStreetMap PBF files specifically for LZM generation.
+This service handles parsing of OpenStreetMap files (both .pbf and .osm formats) specifically for LZM generation.
 It filters and extracts relevant geographic data (nodes and ways) within specified 
 bounding boxes, optimizing for the LZM file format requirements.
 
-Optionally you can instruct the handleer to not filter on a bounding box, but keep all nodes and ways.
+Optionally you can instruct the handler to not filter on a bounding box, but keep all nodes and ways
+that match the other criteria (highway tag, etc).
 """
 
 import time
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import Dict, TYPE_CHECKING
 
 import osmium
 
 if TYPE_CHECKING:
-    from lzm_builder import BoundingBox, Coordinate
+    from lzm_builder import BoundingBox
 
 from lzm_constants import PolylineType, WAY_KEY_TO_TYPE
 from lzm_utils import bbox_overlap_fast, get_way_bounds_fast
 
 
-class PBFHandler(osmium.SimpleHandler):
+class OSMHandler(osmium.SimpleHandler):
     """
-    Service class for parsing PBF files and extracting LZM-relevant data.
+    Service class for parsing OSM files and extracting LZM-relevant data.
     
-    This handler processes OpenStreetMap PBF files, filtering nodes and ways
+    This handler processes OpenStreetMap files (both .pbf and .osm formats), filtering nodes and ways
     that are relevant for generating LZM offline map files. It implements
     spatial filtering, progress tracking, and road type classification.
     """

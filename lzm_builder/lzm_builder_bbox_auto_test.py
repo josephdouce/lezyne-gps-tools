@@ -78,12 +78,12 @@ def test_auto_bbox_detection():
         
         # Step 2: Test auto bbox detection
         print(f"\n🤖 Step 2: Testing auto bbox detection...")
-        print(f"Calling LZMBuilder.from_pbf() with bbox='auto'")
+        print(f"Calling LZMBuilder.from_osm() with bbox='auto'")
         generation_start = time.time()
         
         try:
             builder = LZMBuilder()
-            lzm_file = builder.from_pbf(str(extracted_pbf_file), bbox="auto", verbose=True)
+            lzm_file = builder.from_osm(extracted_pbf_file, bbox="auto", verbose=True)
             lzm_file_path = lzm_file  # Store for cleanup
             
             generation_time = time.time() - generation_start
