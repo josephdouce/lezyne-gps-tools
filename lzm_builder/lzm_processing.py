@@ -400,3 +400,35 @@ def build_lzm_from_pbf(pbf_path: str, bbox: 'BoundingBox',
         print(f"🗺️ Coverage: {htiles}×{vtiles} tiles ({htiles*vtiles:,} total)")
         
     return outname
+
+
+def build_lzm_from_pbf_with_auto_bbox(pbf_path: str, bbox: 'BoundingBox | str' = "auto", 
+                                     keep_service: bool = False, keep_sidewalks: bool = False,
+                                     extraction: bool = False, epsilon: float = 0.00002, opt_level: int = 2,
+                                     verbose: bool = False) -> str:
+    """
+    Standalone function interface for building LZM files from PBF data with auto bbox detection.
+    
+    This is a convenience function that provides the same functionality as LZMBuilder.from_pbf()
+    but as a standalone function. Supports auto-detection of bounding box from filename.
+    
+    Args:
+        pbf_path: Path to OSM PBF file
+        bbox: Geographic bounding box or "auto" to extract from filename
+        keep_service: Include service roads
+        keep_sidewalks: Include sidewalks
+        extraction: Use extraction method (faster, requires osmium cli tools)
+        epsilon: RDP epsilon for simplification (0.00002 default)
+        opt_level: Optimization level (0-3, default 2)
+        verbose: Print progress information
+        
+    Returns:
+        Path to generated LZM file
+        
+    Raises:
+        ValueError: If bbox="auto" but filename doesn't contain bbox pattern
+    """
+    from lzm_builder import LZMBuilder
+    builder = LZMBuilder()
+    return builder.from_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
+                           extraction, epsilon, opt_level, verbose)

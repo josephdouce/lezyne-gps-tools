@@ -11,7 +11,7 @@ Example usage:
     lzm_file = builder.from_pbf("map.osm.pbf", bbox, verbose=True)
     
     # Function interface
-    lzm_file = build_lzm_from_pbf("map.osm.pbf", bbox, verbose=True)
+    lzm_file = build_lzm_from_pbf_with_auto_bbox("map.osm.pbf", bbox, verbose=True)
     
     # Command line
     python lzm_builder.py --pbf map.osm.pbf --bbox 50.92,4.80,50.97,4.85 --verbose
@@ -37,6 +37,7 @@ from lzm_utils import (
     bbox_overlap_fast,
     get_way_bounds_fast,
     perpendicular_distance,
+    pluck_bbox_from_filename,
     point_in_bbox_fast,
     round_away_from_zero,
     simplify,
@@ -50,6 +51,7 @@ from lzm_processing import (
     add_way_to_polylines,
     build_lzm_from_extracted_pbf,
     build_lzm_from_pbf,
+    build_lzm_from_pbf_with_auto_bbox,
     compress_polylines,
 )
 from pbf_handler import PBFHandler
@@ -106,7 +108,7 @@ class LZMBuilder:
         """Initialize LZM builder"""
         pass
         
-    def from_pbf(self, pbf_path: str, bbox: BoundingBox, 
+    def from_pbf(self, pbf_path: str, bbox: BoundingBox | str = "auto", 
                  keep_service: bool = False, keep_sidewalks: bool = False,
                  extraction: bool = False, epsilon: float = 0.00002, opt_level: int = 2,
                  verbose: bool = False) -> str:
@@ -126,12 +128,26 @@ class LZMBuilder:
         Returns:
             Path to generated LZM file
         """
-        if extraction:
+        just_process_whole_pbf = False  # process whole PBF without bbox filtering
+        if isinstance(bbox, str) and bbox == "auto":
+            if extraction:
+                raise ValueError("Cannot use extraction method with bbox='auto'. Auto mode processes the whole PBF file, making extraction redundant.")
+            try:
+                bbox = pluck_bbox_from_filename(pbf_path)
+                just_process_whole_pbf = True
+                if verbose:
+                    print(f"Auto-detected bbox from filename: {bbox}")
+            except ValueError as e:
+                raise ValueError(f"Cannot auto-detect bounding box from filename '{pbf_path}': {e}")
+        
+        
+
+        if extraction and not just_process_whole_pbf:
             return build_lzm_from_extracted_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
                                                       epsilon, opt_level, verbose)
         else:
             return build_lzm_from_pbf(pbf_path, bbox, keep_service, keep_sidewalks,
-                                 False, epsilon, opt_level, verbose)
+                                 just_process_whole_pbf, epsilon, opt_level, verbose)
 
 
 # =============================================================================
@@ -143,7 +159,7 @@ def main():
     ap = argparse.ArgumentParser(description="Build LZM from PBF")
 
     ap.add_argument("--pbf", required=True, help="Path to input .pbf file")
-    ap.add_argument("--bbox", required=True, help="south,west,north,east (decimal degrees)")
+    ap.add_argument("--bbox", required=True, help="south,west,north,east (decimal degrees) OR 'auto' to extract from pbf filename")
     ap.add_argument("--keep-service", action="store_true", help="Keep service roads")
     ap.add_argument("--keep-sidewalks", action="store_true", help="Keep sidewalks")
     ap.add_argument("--extraction", action="store_true", help="Use extraction method (faster, requires osmium cli tools)")
@@ -153,16 +169,35 @@ def main():
     
     args = ap.parse_args()
 
-    s, w, n, e = map(float, args.bbox.split(","))
-    bbox = BoundingBox(s, w, n, e)
-    
-    if args.pbf and args.bbox:
+    just_process_whole_pbf = False  # process whole PBF without bbox filtering
+    bbox = None
+
+    if args.bbox == "auto":
         if args.extraction:
+            print("Error: Cannot use --extraction with --bbox auto")
+            print("Auto mode processes the whole PBF file, making extraction redundant.")
+            print("Remove --extraction flag when using --bbox auto")
+            return
+        try:
+            bbox = pluck_bbox_from_filename(args.pbf)
+            just_process_whole_pbf = True
+            print(f"Auto-detected bbox from filename: {bbox}")
+        except ValueError as e:
+            print(f"Error: Cannot auto-detect bounding box from filename '{args.pbf}': {e}")
+            print("Please provide explicit bounding box coordinates with --bbox south,west,north,east")
+            return
+
+    else:
+        s, w, n, e = map(float, args.bbox.split(","))
+        bbox = BoundingBox(s, w, n, e)
+    
+    if args.pbf and bbox:
+        if args.extraction and not just_process_whole_pbf:
             outname = build_lzm_from_extracted_pbf(args.pbf, bbox, args.keep_service, args.keep_sidewalks,
                                                         args.epsilon, args.opt, args.verbose)
         else:
             outname = build_lzm_from_pbf(args.pbf, bbox, args.keep_service, args.keep_sidewalks,
-                                         False, args.epsilon, args.opt, args.verbose)
+                                         just_process_whole_pbf, args.epsilon, args.opt, args.verbose)
     else:
         if not args.pbf:
             print("Error: Specify --pbf input file")

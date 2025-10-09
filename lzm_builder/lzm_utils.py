@@ -150,3 +150,46 @@ def extract_smaller_pbf_from_larger_pbf(input_pbf: str, output_pbf: str, bbox: '
         if e.stderr:
             print(f"stderr: {e.stderr}")
         return False
+
+def pluck_bbox_from_filename(filename: str) -> 'BoundingBox':
+    """Extract bounding box from filename formatted as '..._minlat_minlon_maxlat_maxlon...'.
+
+    Example filenames: 
+        'map_34.0_-118.5_34.5_-118.0.pbf'
+        'map_34.0_-118.5_34.5_-118.0_grid_1_5.lzm'
+        'map_34.0_-118.5_34.5_-118.0_full.osm'
+
+    Must be decimal degrees with underscores as separators.
+    Not Integers, No DMS, No other separators.
+
+    Raises ValueError if pattern not found.
+    Returns: BoundingBox object with extracted coordinates.
+    """
+    import re
+    # Import here to avoid circular imports
+    from typing import TYPE_CHECKING
+    if TYPE_CHECKING:
+        from lzm_builder import BoundingBox
+
+    pattern = r'(\-?\d+\.\d+)_(-?\d+\.\d+)_(-?\d+\.\d+)_(-?\d+\.\d+)'
+    match = re.search(pattern, filename)
+    if not match:
+        raise ValueError("Filename does not contain a valid bounding box pattern.")
+    
+    minlat, minlon, maxlat, maxlon = map(float, match.groups())
+    
+    # Create BoundingBox dynamically to avoid circular import
+    import sys
+    if 'lzm_builder' in sys.modules:
+        BoundingBox = sys.modules['lzm_builder'].BoundingBox
+    else:
+        # Fallback: create a simple dataclass
+        from dataclasses import dataclass
+        @dataclass
+        class BoundingBox:
+            south: float
+            west: float  
+            north: float
+            east: float
+    
+    return BoundingBox(north=maxlat, south=minlat, east=maxlon, west=minlon)
