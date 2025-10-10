@@ -16,6 +16,9 @@ import sys
 import time
 from pathlib import Path
 
+# Add parent directory to path to import lzm_builder modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from lzm_builder import LZMBuilder, BoundingBox, Coordinate, Polyline, GridTile
 
 
@@ -39,7 +42,7 @@ def test_signal_du_botrange():
     print(f"Bounding box: {bbox.south:.6f}, {bbox.west:.6f} (SW) to {bbox.north:.6f}, {bbox.east:.6f} (NE)")
     
     # Input and output files
-    from lzm_utils import filename_from_bbox, script_dir
+    from utils.geographic import filename_from_bbox, script_dir
     import os
     pbf_file = os.path.join(script_dir(), "belgium_sample.osm.pbf")
     expected_lzm_file = filename_from_bbox(bbox)

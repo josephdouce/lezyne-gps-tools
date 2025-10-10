@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
-LZM Builder Auto Bbox Test Script
+LZM Builder Test Script
 
-Tests the auto bbox detection feature of the refactored LZM builder.
-This test:
-1. Extracts a subset from belgium_sample.osm.pbf using osmium CLI
-2. Names the extracted file with bbox coordinates in the filename  
-3. Tests auto bbox detection by calling LZMBuilder.from_pbf() with bbox="auto"
-4. Performs sanity checking on the result
-5. Cleans up both the extracted PBF and generated LZM files
+Tests the refactored LZM builder with Belgium sample data.
+Generates an LZM file for the Signal du Botrange area (highest point in Belgium)
+and performs sanity checking on the result.
 
 Test area: Signal du Botrange and High Fagnes nature reserve
 Bounding box: 50.483507, 6.035957 (SW) to 50.522377, 6.138439 (NE)
@@ -16,21 +12,25 @@ Bounding box: 50.483507, 6.035957 (SW) to 50.522377, 6.138439 (NE)
 
 import os
 import struct
-import subprocess
 import sys
 import time
 from pathlib import Path
 
+# Add parent directory to path to import lzm_builder modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from lzm_builder import LZMBuilder, BoundingBox, Coordinate, Polyline, GridTile
 
 
-def test_auto_bbox_detection():
-    """Test LZM generation with auto bbox detection for Signal du Botrange area."""
+def test_signal_du_botrange():
+    """Test LZM generation for Signal du Botrange area in Belgium."""
     
-    print("🇧🇪 LZM Builder Auto Bbox Test - Signal du Botrange")
-    print("=" * 60)
+    print("🇧🇪 LZM Builder Test - Signal du Botrange")
+    print("=" * 50)
     
     # Define the test area (Signal du Botrange and High Fagnes)
+    # Southwest: 50.483507, 6.035957
+    # Northeast: 50.522377, 6.138439
     bbox = BoundingBox(
         south=50.483507,
         west=6.035957, 
@@ -42,51 +42,34 @@ def test_auto_bbox_detection():
     print(f"Bounding box: {bbox.south:.6f}, {bbox.west:.6f} (SW) to {bbox.north:.6f}, {bbox.east:.6f} (NE)")
     
     # Input and output files
-    from lzm_utils import filename_from_bbox, script_dir
+    from utils.geographic import filename_from_bbox, script_dir
     import os
-    source_pbf_file = os.path.join(script_dir(), "belgium_sample.osm.pbf")
-    extracted_pbf_file = filename_from_bbox(bbox, prefix="belgium", suffix="_tk421.osm.pbf", include_path=True)
+    pbf_file = os.path.join(script_dir(), "belgium_sample.osm.pbf")
     expected_lzm_file = filename_from_bbox(bbox)
     lzm_file_path = None  # Track the generated file for cleanup
     
-    print(f"Source PBF: {source_pbf_file}")
-    print(f"Extracted PBF: {extracted_pbf_file}")
-    print(f"Expected LZM output: {expected_lzm_file}")
+    print(f"Input PBF: {pbf_file}")
+    print(f"Expected output: {expected_lzm_file}")
     
-    # Check source file exists
-    if not os.path.exists(source_pbf_file):
-        print(f"❌ ERROR: Source file not found: {source_pbf_file}")
+    # Check input file exists
+    if not os.path.exists(pbf_file):
+        print(f"❌ ERROR: Input file not found: {pbf_file}")
         return False
     
-    source_size = os.path.getsize(source_pbf_file)
-    print(f"✅ Source PBF file found ({source_size:,} bytes)")
+    pbf_size = os.path.getsize(pbf_file)
+    print(f"✅ Input PBF file found ({pbf_size:,} bytes)")
+    
+    # Generate LZM file
+    print("\n📍 Generating LZM file...")
+    start_time = time.time()
     
     try:
-        # Step 1: Extract subset using osmium CLI
-        print(f"\n📦 Step 1: Extracting subset using osmium CLI...")
-        extract_start = time.time()
-        
-        success = extract_pbf_subset(source_pbf_file, extracted_pbf_file, bbox)
-        if not success:
-            print("❌ ERROR: Failed to extract PBF subset")
-            return False
-        
-        extract_time = time.time() - extract_start
-        extracted_size = os.path.getsize(extracted_pbf_file)
-        print(f"✅ Extraction complete in {extract_time:.2f} seconds")
-        print(f"📁 Extracted PBF: {extracted_size:,} bytes")
-        
-        # Step 2: Test auto bbox detection
-        print(f"\n🤖 Step 2: Testing auto bbox detection...")
-        print(f"Calling LZMBuilder.from_osm() with bbox='auto'")
-        generation_start = time.time()
-        
         try:
             builder = LZMBuilder()
-            lzm_file = builder.from_osm(extracted_pbf_file, bbox="auto", verbose=True)
+            lzm_file = builder.from_osm(pbf_file, bbox, extraction=True, verbose=True)
             lzm_file_path = lzm_file  # Store for cleanup
             
-            generation_time = time.time() - generation_start
+            generation_time = time.time() - start_time
             print(f"✅ LZM file generated in {generation_time:.2f} seconds")
             print(f"Output file: {lzm_file}")
             
@@ -104,69 +87,21 @@ def test_auto_bbox_detection():
         lzm_size = os.path.getsize(lzm_file_path)
         print(f"✅ LZM file created ({lzm_size:,} bytes)")
         
-        # Step 4: Sanity checking
-        print(f"\n🔍 Step 3: Performing sanity checks...")
+        # Sanity checking
+        print("\n🔍 Performing sanity checks...")
         from pathlib import Path
         test_result = perform_sanity_checks(Path(lzm_file_path), bbox)
         
         return test_result
         
     finally:
-        # Cleanup: Remove both the extracted PBF and generated LZM files
-        cleanup_files = []
-        
-        if os.path.exists(extracted_pbf_file):
-            cleanup_files.append(extracted_pbf_file)
-        
+        # Cleanup: Remove the generated LZM file
         if lzm_file_path and os.path.exists(lzm_file_path):
-            cleanup_files.append(lzm_file_path)
-        
-        for file_path in cleanup_files:
             try:
-                os.remove(file_path)
-                print(f"🧹 Cleaned up test file: {os.path.basename(file_path)}")
+                os.remove(lzm_file_path)
+                print(f"🧹 Cleaned up test file: {os.path.basename(lzm_file_path)}")
             except OSError as e:
-                print(f"⚠️  Warning: Failed to remove test file {file_path}: {e}")
-
-
-def extract_pbf_subset(source_pbf: Path, output_pbf: Path, bbox: BoundingBox) -> bool:
-    """Extract a subset of the source PBF file using osmium CLI."""
-    
-    try:
-        # Build osmium extract command
-        # Format: osmium extract --bbox west,south,east,north input.pbf --output output.pbf
-        cmd = [
-            "osmium", "extract", 
-            "--bbox", f"{bbox.west},{bbox.south},{bbox.east},{bbox.north}",
-            "--output", str(output_pbf),
-            str(source_pbf)
-        ]
-        
-        print(f"Running osmium command: {' '.join(cmd)}")
-        
-        # Run the command
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        
-        if result.returncode == 0:
-            print("✅ osmium extract completed successfully")
-            return True
-        else:
-            print(f"❌ osmium extract failed (exit code {result.returncode})")
-            print(f"stdout: {result.stdout}")
-            print(f"stderr: {result.stderr}")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        print("❌ osmium extract timed out (>300s)")
-        return False
-    except FileNotFoundError:
-        print("❌ osmium command not found. Please install osmium-tool:")
-        print("   brew install osmium-tool  # macOS")
-        print("   apt install osmium-tool   # Ubuntu/Debian")
-        return False
-    except Exception as e:
-        print(f"❌ osmium extract failed: {e}")
-        return False
+                print(f"⚠️  Warning: Failed to remove test file {lzm_file_path}: {e}")
 
 
 def perform_sanity_checks(lzm_path: Path, expected_bbox: BoundingBox) -> bool:
@@ -288,21 +223,20 @@ def verify_coordinates_in_bounds(lzm_path: Path, bbox: BoundingBox) -> bool:
 def main():
     """Main test function."""
     
-    print("Starting LZM Builder Auto Bbox Test Suite")
+    print("Starting LZM Builder Test Suite")
     print("Working directory:", os.getcwd())
     
     # Run the main test
-    success = test_auto_bbox_detection()
+    success = test_signal_du_botrange()
     
     if success:
         print("\n🎉 All tests completed successfully!")
-        print("The auto bbox detection feature is working correctly!")
+        print("The refactored LZM builder is working correctly with real-world data.")
         return 0
     else:
         print("\n💥 Some tests failed!")
         print("Please review the output above for details.")
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

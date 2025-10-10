@@ -1,5 +1,5 @@
 """
-LZM Constants Module
+Constants Module
 
 This module contains all constants, enums, and configuration mappings used by the LZM builder.
 These include polyline type definitions, OpenStreetMap highway mappings, and processing order.
