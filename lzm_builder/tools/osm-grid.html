@@ -170,6 +170,9 @@
                 <div class="info-item">
                     <strong>25km Squares:</strong> <span id="squareCount">0</span>
                 </div>
+                <div class="info-item">
+                    <strong>Est. Download Time:</strong> <span id="downloadTime">0 min</span>
+                </div>
                 <div id="warnings"></div>
             </div>
         </div>
@@ -334,21 +337,31 @@ find . -name "*.osm" -size -200c -delete
         // Create octagon
         function createOctagon() {
             const center = map.getCenter();
-            const zoom = map.getZoom();
-
-            // Calculate radius based on zoom level (make it consistent in lat/lng)
-            let radius = 2 / Math.pow(2, zoom - 3);
-            if (radius < 0.05) radius = 0.05;
-            if (radius > 5) radius = 5;
-
-            // Create octagon vertices with proper aspect ratio
+            const mapSize = map.getSize(); // Get map container size in pixels
+            
+            // Calculate radius based on map window size (not zoom level)
+            // Use smaller dimension to ensure octagon fits in window
+            const minDimension = Math.min(mapSize.x, mapSize.y);
+            const radiusPixels = minDimension * 0.15; // 15% of smaller dimension
+            
+            // Create points at radius distance in all 4 directions to get proper geographic scaling
+            const centerPoint = map.latLngToLayerPoint(center);
+            const northPoint = L.point(centerPoint.x, centerPoint.y - radiusPixels);
+            const eastPoint = L.point(centerPoint.x + radiusPixels, centerPoint.y);
+            
+            const northLatLng = map.layerPointToLatLng(northPoint);
+            const eastLatLng = map.layerPointToLatLng(eastPoint);
+            
+            // Calculate radius in each direction
+            const radiusLat = Math.abs(northLatLng.lat - center.lat);
+            const radiusLng = Math.abs(eastLatLng.lng - center.lng);
+            
+            // Create octagon vertices with proper geographic scaling
             vertices = [];
             for (let i = 0; i < 8; i++) {
                 const angle = (i * 2 * Math.PI) / 8;
-                // Use longitude for both x and y to maintain circular shape
-                const latRadius = radius / Math.cos(center.lat * Math.PI / 180); // Adjust for latitude
-                const lat = center.lat + latRadius * Math.cos(angle);
-                const lng = center.lng + radius * Math.sin(angle);
+                const lat = center.lat + radiusLat * Math.sin(angle);  // sin for latitude (y-axis)
+                const lng = center.lng + radiusLng * Math.cos(angle);  // cos for longitude (x-axis)
                 vertices.push(L.latLng(lat, lng));
             }
 
@@ -574,8 +587,23 @@ find . -name "*.osm" -size -200c -delete
         // Update info window
         function updateInfo(squares) {
             const area = calculatePolygonArea(vertices);
+            const squareCount = squares.length;
+            
+            // Calculate estimated download time (10 seconds download + 30 seconds wait per square)
+            // Last square doesn't need wait time
+            const downloadTimeSeconds = squareCount > 0 ? (squareCount * 10) + ((squareCount - 1) * 30) : 0;
+            const downloadTimeMinutes = Math.round(downloadTimeSeconds / 60);
+            
             document.getElementById('totalArea').textContent = area.toFixed(2) + ' km²';
-            document.getElementById('squareCount').textContent = squares.length;
+            document.getElementById('squareCount').textContent = squareCount;
+            
+            if (downloadTimeMinutes < 60) {
+                document.getElementById('downloadTime').textContent = downloadTimeMinutes + ' min';
+            } else {
+                const hours = Math.floor(downloadTimeMinutes / 60);
+                const minutes = downloadTimeMinutes % 60;
+                document.getElementById('downloadTime').textContent = hours + 'h ' + minutes + 'm';
+            }
         }
 
         // Calculate polygon area (rough approximation)
@@ -681,6 +709,7 @@ find . -name "*.osm" -size -200c -delete
             document.getElementById('bashScript').value = '';
             document.getElementById('totalArea').textContent = '0 km²';
             document.getElementById('squareCount').textContent = '0';
+            document.getElementById('downloadTime').textContent = '0 min';
             clearWarnings();
         }
 
