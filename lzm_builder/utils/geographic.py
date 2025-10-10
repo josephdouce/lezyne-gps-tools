@@ -161,7 +161,7 @@ def script_dir() -> str:
 
 def filename_from_bbox(bbox: 'BoundingBox', prefix: str = "mf", suffix: str = ".lzm", include_path: bool = False) -> str:
     """Generate filename from bounding box coordinates."""
-    filename = f"{prefix}_{bbox.south:.6f}_{bbox.west:.6f}_{bbox.north:.6f}_{bbox.east:.6f}{suffix}"
+    filename = f"{prefix}_{bbox.south:.2f}_{bbox.west:.2f}_{bbox.north:.2f}_{bbox.east:.2f}{suffix}"
     
     if include_path:
         return os.path.join(script_dir(), filename)
