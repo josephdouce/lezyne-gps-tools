@@ -1,5 +1,5 @@
 """
-LZM Processing Module
+LZM Processing Service
 
 This module contains the core processing functions for generating LZM files.
 These functions handle the main algorithmic work of converting OSM data into
@@ -10,25 +10,18 @@ import struct
 from typing import List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from lzm_builder import Coordinate, GridTile, Polyline
+    from models.data_classes import Coordinate, GridTile, Polyline
 
-from lzm_constants import GROUP_ORDER
-
-from lzm_utils import (
-    angle_degrees_difference,   
-    bbox_contains,
-    simplify,
-)
-
-
-from polyline_encoder import PolylineEncoder
+from utils.constants import GROUP_ORDER
+from utils.geographic import angle_degrees_difference, bbox_contains, simplify
+from .polyline_encoder import PolylineEncoder
 
 
 def add_way_to_polylines(way_coords: List['Coordinate'], ptype: int, tile: 'GridTile',
                          opt_level: int, epsilon: float):
     """Add a way to the appropriate polylines in a tile."""
     # Import here to avoid circular imports
-    from lzm_builder import Polyline
+    from models.data_classes import Polyline
     
     new_polylines: List[Polyline] = []
     new_poly = Polyline()
@@ -103,7 +96,7 @@ def add_way_to_polylines(way_coords: List['Coordinate'], ptype: int, tile: 'Grid
 def compress_polylines(polys: List['Polyline']) -> Tuple[bytes, int]:
     """Compress a list of polylines into binary format."""
     # Import here to avoid circular imports
-    from lzm_builder import Polyline
+    from models.data_classes import Polyline
     
     tmp = bytearray(8000)
     wpos = 0

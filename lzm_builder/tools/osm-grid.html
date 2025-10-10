@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSM Grid Downloader</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .description {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .map-container {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .polygon-btn {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 5px;
+            padding: 8px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            font-size: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .polygon-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .polygon-btn.active {
+            background: #ff4444;
+            color: white;
+        }
+
+        .info-window {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 250px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+            display: none;
+        }
+
+        .info-window h3 {
+            margin: 0 0 10px 0;
+            color: #007acc;
+            border-bottom: 1px solid #007acc;
+            padding-bottom: 5px;
+        }
+
+        .info-item {
+            margin: 8px 0;
+        }
+
+        .warning {
+            color: #ff4444;
+            font-weight: bold;
+            margin: 10px 0;
+            padding: 8px;
+            background: #ffe6e6;
+            border-radius: 4px;
+        }
+
+        .script-container {
+            margin-top: 30px;
+        }
+
+        .script-container h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        #bashScript {
+            width: 100%;
+            height: 300px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            resize: vertical;
+            background-color: #f8f8f8;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .copy-btn:hover {
+            background: #005a99;
+        }
+
+        .vertex-marker {
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>OSM Grid Downloader</h1>
+        <p class="description">Use the map below to generate a bash script to download 25km squares of OSM Highway data
+            from Overpass. <a href="#detailed-instructions"
+                style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See detailed instructions below</a>
+        </p>
+
+        <div class="map-container">
+            <div id="map"></div>
+            <button class="polygon-btn" id="polygonBtn" title="Toggle Polygon Mode">🛑</button>
+            <div class="info-window" id="infoWindow">
+                <h3>Grid Information</h3>
+                <div class="info-item">
+                    <strong>Total Area:</strong> <span id="totalArea">0 km²</span>
+                </div>
+                <div class="info-item">
+                    <strong>25km Squares:</strong> <span id="squareCount">0</span>
+                </div>
+                <div class="info-item">
+                    <strong>Est. Download Time:</strong> <span id="downloadTime">0 min</span>
+                </div>
+                <div id="warnings"></div>
+            </div>
+        </div>
+
+        <div class="script-container">
+            <h3>Generated Bash Script</h3>
+            <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
+            <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
+        </div>
+    </div>
+
+    <!-- Detailed Instructions Section -->
+    <div class="container" id="detailed-instructions"
+        style="margin-top: 40px; border-top: 3px solid #007acc; padding-top: 30px;">
+        <h2 style="color: #007acc; margin-bottom: 20px;">📖 Detailed Instructions</h2>
+
+        <h3 style="color: #333; margin-top: 30px;">🎯 What This Tool Does</h3>
+        <p style="line-height: 1.6; color: #666; margin-bottom: 20px;">
+            This tool generates a comprehensive download strategy for creating offline maps of large regions (countries,
+            states, provinces).
+            It divides your selected area into a grid of 25km × 25km squares and creates a bash script to download
+            OpenStreetMap highway data
+            for each square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
+        </p>
+
+        <h3 style="color: #333; margin-top: 30px;">🚀 Complete Workflow</h3>
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">Step 1: Generate Download Script</h4>
+            <ol style="line-height: 1.6;">
+                <li>Click the 🛑 button to enter polygon mode</li>
+                <li>Drag the octagon vertices to cover your desired region</li>
+                <li>Ensure polygon remains convex (tool will warn if not)</li>
+                <li>Copy the generated bash script from the text area</li>
+                <li>Save to a file: <code
+                        style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">download_region.sh</code>
+                </li>
+            </ol>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">Step 2: Download OSM Data</h4>
+            <pre style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto;"><code># Create and enter download directory
+mkdir my_region_osm && cd my_region_osm
+
+# Make script executable and run
+chmod +x ../download_region.sh
+../download_region.sh</code></pre>
+
+            <p style="margin-top: 15px; line-height: 1.6;"><strong>Why 30-second delays?</strong> The Overpass API has
+                rate limits to prevent server overload.
+                The 30-second delay ensures we respect these limits and maintain good citizenship with the free service.
+            </p>
+
+            <p style="line-height: 1.6;"><strong>Resume capability:</strong> If downloads are interrupted, simply re-run
+                the script.
+                It automatically skips files that already exist and are larger than 200 bytes (indicating successful
+                download).</p>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">Step 3: Convert to LZM Files</h4>
+            <p style="line-height: 1.6; margin-bottom: 15px;">Once all OSM files are downloaded, convert them to Lezyne
+                LZM format:</p>
+
+            <pre style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto;"><code># Convert all OSM files to LZM format (one-liner)
+for osm in *.osm; do python ../lzm_builder.py --osm "$osm" --bbox auto --verbose; done</code></pre>
+
+            <p style="margin-top: 15px; line-height: 1.6;">This uses the auto bbox detection feature, which extracts
+                coordinates from the filename to determine the map area.</p>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">Step 4: Deploy to Device</h4>
+            <pre style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto;"><code># Copy all LZM files to Lezyne GPS device
+cp *.lzm /Volumes/LEZYNE/Maps/     # macOS
+# or
+cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
+        </div>
+
+        <h3 style="color: #333; margin-top: 30px;">🔧 Troubleshooting</h3>
+        <div
+            style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #856404;">Broken/Incomplete Downloads</h4>
+            <p style="line-height: 1.6; color: #856404; margin-bottom: 10px;">If you suspect some OSM files are broken
+                or incomplete:</p>
+            <pre style="background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 3px; margin: 10px 0;"><code># Find files smaller than 200 bytes (likely failed downloads)
+find . -name "*.osm" -size -200c
+
+# Delete small/broken files and re-run download script
+find . -name "*.osm" -size -200c -delete
+./download_region.sh</code></pre>
+        </div>
+
+        <div
+            style="background: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #0c5460;">Expected File Sizes</h4>
+            <ul style="line-height: 1.6; color: #0c5460;">
+                <li><strong>Rural areas:</strong> 50-200 KB per OSM file</li>
+                <li><strong>Urban areas:</strong> 500KB-2MB per OSM file</li>
+                <li><strong>Final LZM files:</strong> 5-50 KB each</li>
+                <li><strong>Empty areas:</strong> ~1KB (just XML structure)</li>
+            </ul>
+        </div>
+
+        <h3 style="color: #333; margin-top: 30px;">📊 Real-World Example</h3>
+        <p style="line-height: 1.6; color: #666; margin-bottom: 15px;">
+            <strong>Belgium Coverage:</strong> 30,500 km² → 73 grid squares → 40 minutes download time → 17 minutes LZM
+            conversion → Complete offline coverage
+        </p>
+
+        <div
+            style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <p style="line-height: 1.6; color: #155724; margin: 0;"><strong>💡 Pro Tip:</strong>
+                For very large regions, consider breaking them into smaller polygons to manage download times and reduce
+                the risk of interruption.
+                Each polygon can be processed independently and the resulting LZM files combined on your device.</p>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Global variables
+        let map;
+        let polygonMode = false;
+        let polygon = null;
+        let vertices = [];
+        let gridSquares = [];
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 2,
+                zoomControl: true,
+                scrollWheelZoom: true,
+                doubleClickZoom: true,
+                boxZoom: true,
+                keyboard: true,
+                dragging: true,
+                touchZoom: true,
+                rotate: false
+            });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Initialize the application
+        function init() {
+            initMap();
+
+            // Polygon button event
+            document.getElementById('polygonBtn').addEventListener('click', togglePolygonMode);
+        }
+
+        // Toggle polygon mode
+        function togglePolygonMode() {
+            const btn = document.getElementById('polygonBtn');
+            const infoWindow = document.getElementById('infoWindow');
+
+            polygonMode = !polygonMode;
+
+            if (polygonMode) {
+                btn.classList.add('active');
+                infoWindow.style.display = 'block';
+                createOctagon();
+            } else {
+                btn.classList.remove('active');
+                infoWindow.style.display = 'none';
+                clearPolygon();
+                clearGrid();
+                clearScript();
+            }
+        }
+
+        // Create octagon
+        function createOctagon() {
+            const center = map.getCenter();
+            const mapSize = map.getSize(); // Get map container size in pixels
+
+            // Calculate radius based on map window size (not zoom level)
+            // Use smaller dimension to ensure octagon fits in window
+            const minDimension = Math.min(mapSize.x, mapSize.y);
+            const radiusPixels = minDimension * 0.15; // 15% of smaller dimension
+
+            // Create points at radius distance in all 4 directions to get proper geographic scaling
+            const centerPoint = map.latLngToLayerPoint(center);
+            const northPoint = L.point(centerPoint.x, centerPoint.y - radiusPixels);
+            const eastPoint = L.point(centerPoint.x + radiusPixels, centerPoint.y);
+
+            const northLatLng = map.layerPointToLatLng(northPoint);
+            const eastLatLng = map.layerPointToLatLng(eastPoint);
+
+            // Calculate radius in each direction
+            const radiusLat = Math.abs(northLatLng.lat - center.lat);
+            const radiusLng = Math.abs(eastLatLng.lng - center.lng);
+
+            // Create octagon vertices with proper geographic scaling
+            vertices = [];
+            for (let i = 0; i < 8; i++) {
+                const angle = (i * 2 * Math.PI) / 8;
+                const lat = center.lat + radiusLat * Math.sin(angle);  // sin for latitude (y-axis)
+                const lng = center.lng + radiusLng * Math.cos(angle);  // cos for longitude (x-axis)
+                vertices.push(L.latLng(lat, lng));
+            }
+
+            drawPolygon();
+        }
+
+        // Draw polygon and vertices
+        function drawPolygon() {
+            // Clear existing polygon and vertices
+            clearPolygon();
+
+            // Create polygon
+            polygon = L.polygon(vertices, {
+                color: '#ff0000',
+                weight: 3,
+                fillColor: '#ff0000',
+                fillOpacity: 0.1
+            }).addTo(map);
+
+            // Create vertex markers array
+            polygon._vertices = [];
+
+            // Add draggable markers for vertices
+            vertices.forEach((vertex, index) => {
+                const marker = L.marker(vertex, {
+                    icon: L.divIcon({
+                        className: 'vertex-marker',
+                        html: '<div style="background-color: #ff0000; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #ffffff;"></div>',
+                        iconSize: [12, 12],
+                        iconAnchor: [6, 6]
+                    }),
+                    draggable: true
+                }).addTo(map);
+
+                marker.on('drag', function (e) {
+                    vertices[index] = e.target.getLatLng();
+                    updatePolygon();
+                });
+
+                marker.on('dragend', function (e) {
+                    vertices[index] = e.target.getLatLng();
+                    updatePolygon();
+                });
+
+                // Store reference for cleanup
+                marker._vertexIndex = index;
+                polygon._vertices.push(marker);
+            });
+
+            updatePolygon();
+        }
+
+        // Update polygon and calculations
+        function updatePolygon() {
+            if (!polygon) return;
+
+            // Update polygon shape
+            polygon.setLatLngs(vertices);
+
+            // Check if polygon is convex
+            if (!isConvex(vertices)) {
+                showWarning('Polygon must be convex! Please adjust vertices.');
+                return;
+            }
+
+            // Calculate and draw grid
+            updateGrid();
+        }
+
+        // Check if polygon is convex
+        function isConvex(points) {
+            if (points.length < 3) return false;
+
+            let sign = null;
+            const n = points.length;
+
+            for (let i = 0; i < n; i++) {
+                const p1 = points[i];
+                const p2 = points[(i + 1) % n];
+                const p3 = points[(i + 2) % n];
+
+                const cross = (p2.lng - p1.lng) * (p3.lat - p2.lat) - (p2.lat - p1.lat) * (p3.lng - p2.lng);
+
+                if (Math.abs(cross) > 1e-10) {
+                    if (sign === null) {
+                        sign = cross > 0;
+                    } else if ((cross > 0) !== sign) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // Update grid calculation and display
+        function updateGrid() {
+            clearGrid();
+            clearWarnings();
+
+            if (!polygon || vertices.length === 0) return;
+
+            // Calculate bounding box
+            const bounds = polygon.getBounds();
+            const minLat = bounds.getSouth();
+            const maxLat = bounds.getNorth();
+            const minLng = bounds.getWest();
+            const maxLng = bounds.getEast();
+
+            // Calculate 25km in degrees (approximate)
+            const kmToDegree = 25 / 111; // roughly 25km in latitude degrees
+
+            // Create grid
+            const squares = [];
+            let squareCount = 0;
+
+            for (let lat = Math.floor(minLat / kmToDegree) * kmToDegree; lat < maxLat; lat += kmToDegree) {
+                for (let lng = Math.floor(minLng / kmToDegree) * kmToDegree; lng < maxLng; lng += kmToDegree) {
+                    const squareBounds = [
+                        [lat, lng],
+                        [lat + kmToDegree, lng],
+                        [lat + kmToDegree, lng + kmToDegree],
+                        [lat, lng + kmToDegree]
+                    ];
+
+                    // Check if square intersects with polygon
+                    if (squareIntersectsPolygon(squareBounds, vertices)) {
+                        squares.push({
+                            bounds: squareBounds,
+                            minLat: parseFloat(lat.toFixed(2)),
+                            minLng: parseFloat(lng.toFixed(2)),
+                            maxLat: parseFloat((lat + kmToDegree).toFixed(2)),
+                            maxLng: parseFloat((lng + kmToDegree).toFixed(2))
+                        });
+                        squareCount++;
+                    }
+                }
+            }
+
+            // Check square limit
+            if (squareCount > 100) {
+                showWarning(`Too many squares (${squareCount})! Maximum is 100. Please reduce polygon size.`);
+                return;
+            }
+
+            // Draw grid squares
+            squares.forEach(square => {
+                const gridSquare = L.rectangle(square.bounds, {
+                    color: '#0066cc',
+                    weight: 1,
+                    fillColor: '#0066cc',
+                    fillOpacity: 0.1
+                }).addTo(map);
+
+                gridSquares.push(gridSquare);
+            });
+
+            // Update info window
+            updateInfo(squares);
+
+            // Generate bash script
+            generateBashScript(squares);
+        }
+
+        // Check if square intersects with polygon
+        function squareIntersectsPolygon(squareBounds, polygonVertices) {
+            // Simple bounding box check first
+            const square = L.polygon(squareBounds);
+            const poly = L.polygon(polygonVertices);
+
+            // Check if any square vertex is inside polygon
+            for (const point of squareBounds) {
+                if (isPointInPolygon(point, polygonVertices)) {
+                    return true;
+                }
+            }
+
+            // Check if any polygon vertex is inside square
+            for (const vertex of polygonVertices) {
+                if (isPointInSquare([vertex.lat, vertex.lng], squareBounds)) {
+                    return true;
+                }
+            }
+
+            // Check for edge intersections (simplified)
+            return edgesIntersect(squareBounds, polygonVertices);
+        }
+
+        // Point in polygon test
+        function isPointInPolygon(point, polygon) {
+            const x = point[1], y = point[0];
+            let inside = false;
+
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].lng, yi = polygon[i].lat;
+                const xj = polygon[j].lng, yj = polygon[j].lat;
+
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+
+            return inside;
+        }
+
+        // Point in square test
+        function isPointInSquare(point, square) {
+            const [y, x] = point;
+            const minLat = Math.min(square[0][0], square[2][0]);
+            const maxLat = Math.max(square[0][0], square[2][0]);
+            const minLng = Math.min(square[0][1], square[2][1]);
+            const maxLng = Math.max(square[0][1], square[2][1]);
+
+            return y >= minLat && y <= maxLat && x >= minLng && x <= maxLng;
+        }
+
+        // Simple edge intersection test
+        function edgesIntersect(square, polygon) {
+            // This is a simplified version - in production you'd want a more robust implementation
+            return false; // For now, we rely on vertex tests above
+        }
+
+        // Update info window
+        function updateInfo(squares) {
+            const area = calculatePolygonArea(vertices);
+            const squareCount = squares.length;
+
+            // Calculate estimated download time (10 seconds download + 30 seconds wait per square)
+            // Last square doesn't need wait time
+            const downloadTimeSeconds = squareCount > 0 ? (squareCount * 10) + ((squareCount - 1) * 30) : 0;
+            const downloadTimeMinutes = Math.round(downloadTimeSeconds / 60);
+
+            document.getElementById('totalArea').textContent = area.toFixed(2) + ' km²';
+            document.getElementById('squareCount').textContent = squareCount;
+
+            if (downloadTimeMinutes < 60) {
+                document.getElementById('downloadTime').textContent = downloadTimeMinutes + ' min';
+            } else {
+                const hours = Math.floor(downloadTimeMinutes / 60);
+                const minutes = downloadTimeMinutes % 60;
+                document.getElementById('downloadTime').textContent = hours + 'h ' + minutes + 'm';
+            }
+        }
+
+        // Calculate polygon area (rough approximation)
+        function calculatePolygonArea(vertices) {
+            if (vertices.length < 3) return 0;
+
+            let area = 0;
+            const n = vertices.length;
+
+            for (let i = 0; i < n; i++) {
+                const j = (i + 1) % n;
+                area += vertices[i].lng * vertices[j].lat;
+                area -= vertices[j].lng * vertices[i].lat;
+            }
+
+            area = Math.abs(area) / 2;
+
+            // Convert to km² (very rough approximation)
+            const kmPerDegree = 111;
+            return area * kmPerDegree * kmPerDegree;
+        }
+
+        // Generate bash script
+        function generateBashScript(squares) {
+            if (squares.length === 0) {
+                document.getElementById('bashScript').value = '';
+                return;
+            }
+
+            const highwayFilter = 'motorway|motorway_link|trunk|primary|secondary|tertiary|trunk_link|tertiary_link|unclassified|residential|living_street|bus_guideway|escape|raceway|road|busway|corridor|rest_area|path|track|cycleway|pedestrian|footway|bridleway|steps|service|turning_circle|turning_loop';
+
+            let script = '#!/bin/bash\n\n';
+            script += '# OSM Highway Data Download Script\n';
+            script += '# Generated by OSM Grid Downloader\n';
+            script += '# Resumes downloads - skips existing files > 200 bytes\n\n';
+
+            squares.forEach((square, index) => {
+                const filename = `osm_${square.minLat}_${square.minLng}_${square.maxLat}_${square.maxLng}_${index + 1}_${squares.length}_grid.osm`;
+                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${square.minLat},${square.minLng},${square.maxLat},${square.maxLng});>;);out;'`;
+
+                // Add conditional download logic
+                script += `# Download ${filename}\n`;
+                script += `if [[ ! -f "${filename}" || $(stat -f%z "${filename}" 2>/dev/null || stat -c%s "${filename}" 2>/dev/null || echo 0) -le 200 ]]; then\n`;
+                script += `  echo "Downloading ${filename}..."\n`;
+                script += `  wget ${url} -O ${filename}\n`;
+
+                // Add sleep after download (except for the last command)
+                if (index < squares.length - 1) {
+                    script += `  sleep 30\n`;
+                }
+
+                script += `else\n`;
+                script += `  echo "Skipping ${filename} (already exists and > 200 bytes)"\n`;
+                script += `fi\n`;
+
+                // Add extra newline except for the last command
+                if (index < squares.length - 1) {
+                    script += '\n';
+                } else {
+                    script += '\n';
+                }
+            });
+
+            document.getElementById('bashScript').value = script;
+        }
+
+        // Show warning
+        function showWarning(message) {
+            const warningsDiv = document.getElementById('warnings');
+            warningsDiv.innerHTML = `<div class="warning">${message}</div>`;
+        }
+
+        // Clear warnings
+        function clearWarnings() {
+            document.getElementById('warnings').innerHTML = '';
+        }
+
+        // Clear polygon
+        function clearPolygon() {
+            if (polygon) {
+                if (polygon._vertices) {
+                    polygon._vertices.forEach(marker => {
+                        map.removeLayer(marker);
+                    });
+                    polygon._vertices = [];
+                }
+                map.removeLayer(polygon);
+                polygon = null;
+                vertices = [];
+            }
+        }
+
+        // Clear grid
+        function clearGrid() {
+            gridSquares.forEach(square => {
+                map.removeLayer(square);
+            });
+            gridSquares = [];
+        }
+
+        // Clear script
+        function clearScript() {
+            document.getElementById('bashScript').value = '';
+            document.getElementById('totalArea').textContent = '0 km²';
+            document.getElementById('squareCount').textContent = '0';
+            document.getElementById('downloadTime').textContent = '0 min';
+            clearWarnings();
+        }
+
+        // Copy script to clipboard
+        function copyScript() {
+            const textarea = document.getElementById('bashScript');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+
+            try {
+                document.execCommand('copy');
+                alert('Script copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy script. Please select and copy manually.');
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>

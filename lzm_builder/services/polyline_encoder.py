@@ -10,9 +10,9 @@ import struct
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from lzm_builder import Coordinate
+    from models.data_classes import Coordinate
 
-from lzm_utils import round_away_from_zero
+from utils.geographic import round_away_from_zero
 
 
 class PolylineEncoder:
