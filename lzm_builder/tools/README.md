@@ -42,7 +42,7 @@ An interactive web-based tool for generating batch download scripts to create co
 **Visual Grid Planning:**
 - Interactive map interface using Leaflet.js
 - Draw custom polygons to define your area of interest
-- Automatically calculates 25km × 25km grid squares
+ - Automatically calculates 0.20° × 0.20° degree grid boxes
 - Real-time feedback on total area and number of downloads
 - Convex polygon validation to ensure proper coverage
 
@@ -54,7 +54,7 @@ An interactive web-based tool for generating batch download scripts to create co
 - Proper file naming with coordinates and grid position
 
 **Safety Features:**
-- Limits to maximum 100 grid squares (prevents server overload)
+ - Limits to maximum 100 grid boxes (prevents server overload)
 - Warns about non-convex polygons
 - Shows total download count and estimated coverage area
 
@@ -68,7 +68,7 @@ An interactive web-based tool for generating batch download scripts to create co
 5. Ensure the polygon remains convex (tool will warn if not)
 6. Review the grid information panel:
    - Total area in km²
-   - Number of 25km squares
+    - Number of 0.20° boxes
    - Any warnings about limits
 
 **Step 2: Generate Download Script**
@@ -88,7 +88,7 @@ cd belgium_osm_data
 ```
 
 **Expected Downloads:**
-- Each file covers 25km × 25km area
+- Each file covers a 0.20° × 0.20° degree bounding box (lat × lon)
 - Filenames like: `osm_50.92_4.80_51.14_5.02_1_73_grid.osm`
 - Format: `osm_{minLat}_{minLng}_{maxLat}_{maxLng}_{index}_{total}_grid.osm`
 - Resume capability: Re-run script to continue interrupted downloads
@@ -119,7 +119,7 @@ cp *.lzm /Volumes/LEZYNE/Maps/
 
 **Planning Phase:**
 - Total area: ~30,500 km²
-- Grid squares: 73 files (25km × 25km each)
+- Grid boxes: 73 files (0.20° × 0.20° each)
 - Download time: ~40 minutes (with rate limiting)
 - Processing time: ~17 minutes for LZM conversion
 
@@ -152,7 +152,7 @@ belgium_project/
 
 **Data Quality:**
 - OSM highway filter includes all road types: motorways, residential streets, bike paths, footpaths
-- 25km squares ensure good overlap between adjacent areas
+- 0.20° boxes provide consistent degree-based tiling (longitude degree width varies with latitude)
 - Overpass API provides up-to-date road data
 
 **Automation:**
@@ -171,7 +171,7 @@ belgium_project/
 #### **Technical Details:**
 
 **Grid System:**
-- 25km squares ≈ 0.225° latitude × variable longitude (depends on latitude)
+- 0.20° × 0.20° degree boxes (lat × lon). Note: degrees are used directly and longitude degrees correspond to different ground distances depending on latitude.
 - Intersection detection ensures complete coverage
 - No gaps or overlaps in final map set
 

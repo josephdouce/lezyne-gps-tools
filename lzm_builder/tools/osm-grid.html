@@ -150,14 +150,51 @@
         .vertex-marker {
             z-index: 1000;
         }
+
+        /* Two-column layout for script and .poly output */
+        .two-column {
+            display: flex;
+            gap: 32px;
+            /* more space between columns */
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+
+        .two-column .column {
+            flex: 1;
+            min-width: 0;
+            /* prevent overflow in flex children */
+            padding: 8px;
+            /* inner padding so content isn't flush */
+            box-sizing: border-box;
+        }
+
+        #polyText {
+            width: 100%;
+            height: 300px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            resize: vertical;
+            background-color: #f8f8f8;
+        }
+
+        @media (max-width: 900px) {
+            .two-column {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <h1>OSM Grid Downloader</h1>
-        <p class="description">Use the map below to generate a bash script to download 25km squares of OSM Highway data
-            from Overpass. <a href="#detailed-instructions"
+        <p class="description">Use the map below to generate a bash script to download 0.20° × 0.20° degree boxes of OSM
+            Highway data
+            from Overpass. <br /><a href="#detailed-instructions"
                 style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See detailed instructions below</a>
         </p>
 
@@ -170,19 +207,30 @@
                     <strong>Total Area:</strong> <span id="totalArea">0 km²</span>
                 </div>
                 <div class="info-item">
-                    <strong>25km Squares:</strong> <span id="squareCount">0</span>
+                    <strong>0.20° Boxes:</strong> <span id="squareCount">0</span>
                 </div>
                 <div class="info-item">
                     <strong>Est. Download Time:</strong> <span id="downloadTime">0 min</span>
                 </div>
+                <!-- removed poly display from info window; poly output moved below script area -->
                 <div id="warnings"></div>
             </div>
         </div>
 
         <div class="script-container">
-            <h3>Generated Bash Script</h3>
-            <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
-            <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
+            <h3>Generated Outputs</h3>
+            <div class="two-column">
+                <div class="column">
+                    <h4>Generated Bash Script</h4>
+                    <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
+                    <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
+                </div>
+                <div class="column">
+                    <h4>.poly Output</h4>
+                    <textarea id="polyText" placeholder="Generated .poly content will appear here..."></textarea>
+                    <button class="copy-btn" onclick="copyPoly()">Copy .poly to Clipboard</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -195,7 +243,8 @@
         <p style="line-height: 1.6; color: #666; margin-bottom: 20px;">
             This tool generates a comprehensive download strategy for creating offline maps of large regions (countries,
             states, provinces).
-            It divides your selected area into a grid of 25km × 25km squares and creates a bash script to download
+            It divides your selected area into a grid of 0.20° × 0.20° degree boxes and creates a bash script to
+            download
             OpenStreetMap highway data
             for each square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
         </p>
@@ -219,9 +268,11 @@
             <pre style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto;"><code># Create and enter download directory
 mkdir my_region_osm && cd my_region_osm
 
+# Use vi or nano to create the script file
+
 # Make script executable and run
-chmod +x ../download_region.sh
-../download_region.sh</code></pre>
+chmod +x download_region.sh
+./download_region.sh</code></pre>
 
             <p style="margin-top: 15px; line-height: 1.6;"><strong>Why 30-second delays?</strong> The Overpass API has
                 rate limits to prevent server overload.
@@ -259,13 +310,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
             <h4 style="margin-top: 0; color: #856404;">Broken/Incomplete Downloads</h4>
             <p style="line-height: 1.6; color: #856404; margin-bottom: 10px;">If you suspect some OSM files are broken
-                or incomplete:</p>
-            <pre style="background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 3px; margin: 10px 0;"><code># Find files smaller than 200 bytes (likely failed downloads)
-find . -name "*.osm" -size -200c
+                or incomplete, just re-run the download script and normally it will fix the issues.</p>
 
-# Delete small/broken files and re-run download script
-find . -name "*.osm" -size -200c -delete
-./download_region.sh</code></pre>
         </div>
 
         <div
@@ -274,23 +320,26 @@ find . -name "*.osm" -size -200c -delete
             <ul style="line-height: 1.6; color: #0c5460;">
                 <li><strong>Rural areas:</strong> 50-200 KB per OSM file</li>
                 <li><strong>Urban areas:</strong> 500KB-2MB per OSM file</li>
-                <li><strong>Final LZM files:</strong> 5-50 KB each</li>
+                <li><strong>Final LZM files:</strong> 5-200 KB each</li>
                 <li><strong>Empty areas:</strong> ~1KB (just XML structure)</li>
             </ul>
         </div>
 
         <h3 style="color: #333; margin-top: 30px;">📊 Real-World Example</h3>
         <p style="line-height: 1.6; color: #666; margin-bottom: 15px;">
-            <strong>Belgium Coverage:</strong> 30,500 km² → 73 grid squares → 40 minutes download time → 17 minutes LZM
+            <strong>Belgium Coverage:</strong> 30,500 km² → 73 grid boxes → 40 minutes download time → 2 ~ 3 minutes LZM
             conversion → Complete offline coverage
+            <br />
+            <strong>Luxembourg Coverage:</strong> 2,586 km² → 12 grid boxes → 10 minutes download time → 1 ~ 2 minutes
+            LZM conversion → Complete offline coverage
         </p>
 
         <div
             style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
             <p style="line-height: 1.6; color: #155724; margin: 0;"><strong>💡 Pro Tip:</strong>
                 For very large regions, consider breaking them into smaller polygons to manage download times and reduce
-                the risk of interruption.
-                Each polygon can be processed independently and the resulting LZM files combined on your device.</p>
+                the risk of interruption. Each polygon can be processed independently and the resulting LZM files
+                combined on your device.</p>
         </div>
     </div>
 
@@ -490,30 +539,39 @@ find . -name "*.osm" -size -200c -delete
             const minLng = bounds.getWest();
             const maxLng = bounds.getEast();
 
-            // Calculate 25km in degrees (approximate)
-            const kmToDegree = 25 / 111; // roughly 25km in latitude degrees
+            // Grid step in degrees: use 0.20° boxes (lat × lon)
+            const degSize = 0.20;
+
+            // Use index-based loops to avoid floating-point accumulation issues
+            const startLatIndex = Math.floor(minLat / degSize);
+            const endLatIndex = Math.ceil(maxLat / degSize);
+            const startLngIndex = Math.floor(minLng / degSize);
+            const endLngIndex = Math.ceil(maxLng / degSize);
 
             // Create grid
             const squares = [];
             let squareCount = 0;
 
-            for (let lat = Math.floor(minLat / kmToDegree) * kmToDegree; lat < maxLat; lat += kmToDegree) {
-                for (let lng = Math.floor(minLng / kmToDegree) * kmToDegree; lng < maxLng; lng += kmToDegree) {
+            for (let latIdx = startLatIndex; latIdx < endLatIndex; latIdx++) {
+                const lat = latIdx * degSize;
+                for (let lngIdx = startLngIndex; lngIdx < endLngIndex; lngIdx++) {
+                    const lng = lngIdx * degSize;
                     const squareBounds = [
                         [lat, lng],
-                        [lat + kmToDegree, lng],
-                        [lat + kmToDegree, lng + kmToDegree],
-                        [lat, lng + kmToDegree]
+                        [lat + degSize, lng],
+                        [lat + degSize, lng + degSize],
+                        [lat, lng + degSize]
                     ];
 
                     // Check if square intersects with polygon
                     if (squareIntersectsPolygon(squareBounds, vertices)) {
                         squares.push({
                             bounds: squareBounds,
-                            minLat: parseFloat(lat.toFixed(2)),
-                            minLng: parseFloat(lng.toFixed(2)),
-                            maxLat: parseFloat((lat + kmToDegree).toFixed(2)),
-                            maxLng: parseFloat((lng + kmToDegree).toFixed(2))
+                            // store coordinates with reasonable precision for filenames / queries
+                            minLat: parseFloat(lat.toFixed(5)),
+                            minLng: parseFloat(lng.toFixed(5)),
+                            maxLat: parseFloat((lat + degSize).toFixed(5)),
+                            maxLng: parseFloat((lng + degSize).toFixed(5))
                         });
                         squareCount++;
                     }
@@ -597,10 +655,83 @@ find . -name "*.osm" -size -200c -delete
             return y >= minLat && y <= maxLat && x >= minLng && x <= maxLng;
         }
 
-        // Simple edge intersection test
+        // Robust edge intersection test
+        // Returns true if any edge of the square intersects any edge of the polygon
         function edgesIntersect(square, polygon) {
-            // This is a simplified version - in production you'd want a more robust implementation
-            return false; // For now, we rely on vertex tests above
+            // Helper to normalize a point to {x, y} where x = lng, y = lat
+            function toXY(p) {
+                if (Array.isArray(p)) {
+                    return { x: p[1], y: p[0] };
+                }
+                if (p && typeof p === 'object' && 'lat' in p && 'lng' in p) {
+                    return { x: p.lng, y: p.lat };
+                }
+                return null;
+            }
+
+            // Orientation test
+            function orientation(a, b, c) {
+                // Returns 0 if colinear, 1 if clockwise, -1 if counterclockwise
+                const val = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                const EPS = 1e-12;
+                if (Math.abs(val) < EPS) return 0;
+                return val > 0 ? 1 : -1;
+            }
+
+            // Check if point c lies on segment ab
+            function onSegment(a, b, c) {
+                return (
+                    Math.min(a.x, b.x) - 1e-12 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-12 &&
+                    Math.min(a.y, b.y) - 1e-12 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-12
+                );
+            }
+
+            // Segment intersection test between segment p1-p2 and q1-q2
+            function segmentsIntersect(p1, p2, q1, q2) {
+                const a = toXY(p1);
+                const b = toXY(p2);
+                const c = toXY(q1);
+                const d = toXY(q2);
+
+                if (!a || !b || !c || !d) return false;
+
+                const o1 = orientation(a, b, c);
+                const o2 = orientation(a, b, d);
+                const o3 = orientation(c, d, a);
+                const o4 = orientation(c, d, b);
+
+                // General case
+                if (o1 !== o2 && o3 !== o4) return true;
+
+                // Special Cases - colinear and overlapping
+                if (o1 === 0 && onSegment(a, b, c)) return true;
+                if (o2 === 0 && onSegment(a, b, d)) return true;
+                if (o3 === 0 && onSegment(c, d, a)) return true;
+                if (o4 === 0 && onSegment(c, d, b)) return true;
+
+                return false;
+            }
+
+            // Iterate over polygon edges and square edges
+            const polyLen = polygon.length;
+            if (polyLen < 2) return false;
+
+            // Square has 4 points
+            for (let i = 0; i < polyLen; i++) {
+                const p1 = polygon[i];
+                const p2 = polygon[(i + 1) % polyLen];
+
+                for (let j = 0; j < 4; j++) {
+                    const s1 = square[j];
+                    const s2 = square[(j + 1) % 4];
+
+                    if (segmentsIntersect(p1, p2, s1, s2)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         // Update info window
@@ -623,6 +754,24 @@ find . -name "*.osm" -size -200c -delete
                 const minutes = downloadTimeMinutes % 60;
                 document.getElementById('downloadTime').textContent = hours + 'h ' + minutes + 'm';
             }
+
+            // Update polygon coordinates display
+            const polyName = "region"; // name that will appear at top of .poly
+
+            const polyText = [
+                polyName,
+                "1", // polygon section name (can be any label)
+                ...vertices.map(v => `${v.lng.toFixed(5)} ${v.lat.toFixed(5)}`),
+                "END",
+                "END"
+            ].join("\n");
+
+            // Populate the new poly textarea
+            const polyTextarea = document.getElementById('polyText');
+            if (polyTextarea) {
+                polyTextarea.value = polyText;
+            }
+
         }
 
         // Calculate polygon area (rough approximation)
@@ -660,8 +809,13 @@ find . -name "*.osm" -size -200c -delete
             script += '# Resumes downloads - skips existing files > 200 bytes\n\n';
 
             squares.forEach((square, index) => {
-                const filename = `osm_${square.minLat}_${square.minLng}_${square.maxLat}_${square.maxLng}_${index + 1}_${squares.length}_grid.osm`;
-                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${square.minLat},${square.minLng},${square.maxLat},${square.maxLng});>;);out;'`;
+                // Use 2 decimal places in filenames and Overpass bbox (e.g. 50.40)
+                const filename = `osm_${square.minLat.toFixed(2)}_${square.minLng.toFixed(2)}_${square.maxLat.toFixed(2)}_${square.maxLng.toFixed(2)}_${index + 1}_${squares.length}_grid.osm`;
+                const minLat = square.minLat.toFixed(2);
+                const minLng = square.minLng.toFixed(2);
+                const maxLat = square.maxLat.toFixed(2);
+                const maxLng = square.maxLng.toFixed(2);
+                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${minLat},${minLng},${maxLat},${maxLng});>;);out;'`;
 
                 // Add conditional download logic
                 script += `# Download ${filename}\n`;
@@ -730,6 +884,8 @@ find . -name "*.osm" -size -200c -delete
             document.getElementById('squareCount').textContent = '0';
             document.getElementById('downloadTime').textContent = '0 min';
             clearWarnings();
+            const polyTextarea = document.getElementById('polyText');
+            if (polyTextarea) polyTextarea.value = '';
         }
 
         // Copy script to clipboard
@@ -743,6 +899,21 @@ find . -name "*.osm" -size -200c -delete
                 alert('Script copied to clipboard!');
             } catch (err) {
                 alert('Failed to copy script. Please select and copy manually.');
+            }
+        }
+
+        // Copy .poly content to clipboard
+        function copyPoly() {
+            const textarea = document.getElementById('polyText');
+            if (!textarea) return;
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+
+            try {
+                document.execCommand('copy');
+                alert('.poly copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy .poly. Please select and copy manually.');
             }
         }
 
