@@ -353,7 +353,7 @@ def point_to_line_distance(point: Coordinate, line_start: Coordinate, line_end: 
 def filename_from_bbox(bbox: BoundingBox, prefix="mf", suffix=".lzm") -> str
 def pluck_bbox_from_filename(filename: str) -> BoundingBox
 def script_dir() -> str
-def extract_smaller_pbf_from_larger_pbf(input_pbf: str, output_pbf: str, bbox: BoundingBox) -> bool
+def extract_smaller_osm_from_larger_osm(input_osm: str, output_osm: str, bbox: BoundingBox) -> bool
 ```
 
 ---
