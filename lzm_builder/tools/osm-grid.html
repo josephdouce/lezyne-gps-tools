@@ -193,9 +193,12 @@
     <div class="container">
         <h1>OSM Grid Downloader</h1>
         <p class="description">Use the map below to generate a bash script to download 0.20° × 0.20° degree boxes of OSM
-            Highway data
-            from Overpass. <br /><a href="#detailed-instructions"
-                style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See detailed instructions below</a>
+            Highway data from Overpass. The tool supports two modes:
+            <strong>Polygon Mode</strong> (draw an editable octagon and generate a tiled grid) and
+            <strong>GPX Mode</strong> (🧭 load a GPX track and compute all 0.20° boxes that intersect that track).
+            GPX Mode uses only the first <code>&lt;trk&gt;</code> element in a file and draws the track in red. <br />
+            <a href="#detailed-instructions" style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See
+                detailed instructions below</a>
         </p>
 
         <div class="map-container">
@@ -265,6 +268,14 @@
                         style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">download_region.sh</code>
                 </li>
             </ol>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">GPX Mode</h4>
+            <p style="line-height: 1.6;">Click the compass button (🧭) to open a GPX file. The tool will use the first
+                &lt;trk&gt; element in the GPX and draw it on the map. It then computes all 0.20° boxes intersecting the
+                track and generates the bash script to download those boxes from the Overpass API. The GPX track is
+                displayed in red and is not editable.</p>
         </div>
 
         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">

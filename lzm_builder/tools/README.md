@@ -45,6 +45,7 @@ An interactive web-based tool for generating batch download scripts to create co
  - Automatically calculates 0.20° × 0.20° degree grid boxes
 - Real-time feedback on total area and number of downloads
 - Convex polygon validation to ensure proper coverage
+- Load GPX tracks (GPX Mode) and compute 0.20° boxes that intersect the track (first <trk> only)
 
 **Smart Download Management:**
 - Generates bash scripts with resume capability
@@ -70,6 +71,9 @@ An interactive web-based tool for generating batch download scripts to create co
    - Total area in km²
     - Number of 0.20° boxes
    - Any warnings about limits
+    - To use GPX Mode instead of polygon mode, click the compass button (🧭) and choose a .gpx file. The first
+      <trk> will be used and the map will zoom to the track. The .poly output is hidden in GPX Mode; the generated
+      bash script is produced as usual.
 
 **Step 2: Generate Download Script**
 1. The tool automatically generates a bash script in the text area
