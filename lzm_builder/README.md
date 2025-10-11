@@ -454,8 +454,65 @@ Total tests:  3
 Passed:       3
 Failed:       0
 
-🎉 ALL TESTS PASSED!
 ```
+### `tools/osm-grid.html`
+
+**Purpose**: Interactive OSM Grid Downloader (visual planner).
+
+**Key behaviors**:
+    - Tile size: fixed 0.20° × 0.20° (latitude × longitude) degree boxes.
+    - Modes:
+        - Polygon Mode — creates an editable octagon (8 draggable vertices). The tool enforces convex polygons and will warn if convexity is violated. In Polygon Mode the tool also emits a `.poly` file (longitude latitude order, 5‑decimal precision).
+        - GPX Mode — loads a GPX file and uses only the first `<trk>` element (falls back to `<wpt>` if no track). The GPX track is drawn in red and GPX Mode hides the `.poly` output. The tool computes every 0.20° tile that intersects the track.
+    - Grid indexing: the tool computes integer indices using floor/ceil to avoid accumulation error:
+        - startLatIndex = floor(minLat / 0.20)
+        - endLatIndex   = ceil(maxLat  / 0.20)
+        - startLngIndex = floor(minLng / 0.20)
+        - endLngIndex   = ceil(maxLng  / 0.20)
+    - Intersection tests: a square is selected if any square vertex lies inside the polygon, or any polygon vertex lies inside the square, or any polygon/square edges intersect. For GPX tracks the tool selects squares where any track point is inside the square or any track segment intersects square edges.
+    - Limits: the UI prevents generating more than 100 tiles (safeguard for Overpass and bandwidth).
+
+**Script output (bash)**:
+    - Generates a resumable Bash script that downloads highway data from the Overpass API for each selected tile.
+    - Filename pattern: `osm_{minLat}_{minLng}_{maxLat}_{maxLng}_{index}_{total}_grid.osm` (numeric coordinates rounded to 2 decimal places for filenames and Overpass queries).
+    - `.poly` output (Polygon Mode only):
+        - Format:
+            ```
+            region
+            1
+            {lon} {lat}
+            {lon} {lat}
+            ...
+            END
+            END
+            ```
+        - Coordinates are emitted in longitude then latitude with 5 decimal places.
+    - Resume logic: the script skips files that already exist and are larger than 200 bytes (uses `stat -f%z` on macOS or `stat -c%s` on Linux, with a safe fallback).
+    - Rate limiting: the script sleeps 30 seconds between requests (the UI assumes ~10s download + enforced 30s wait per tile to estimate total time).
+    - Overpass highway filter: the generated query filters for common highway tags (motorway, trunk, primary, secondary, tertiary, residential, cycleway, footway, service, etc.).
+
+**Area & time estimates**:
+    - Polygon Mode: area is approximated with a simple planar polygon area (shoelace) converted to km² using ~111 km/°.
+    - GPX Mode: area is approximated from the GPX bounding box using mean-latitude cosine scaling for longitude degrees.
+    - Download time estimate: modeled as (10s per tile download) + (30s enforced wait between tiles) so total = squares*10 + (squares-1)*30 seconds.
+
+**How to use (quick)**:
+    1. Open `lzm_builder/tools/osm-grid.html` in a web browser.
+    2. Enter Polygon Mode (🛑) and drag the octagon vertices to cover your area, or click the compass (🧭) to load a GPX file (first `<trk>` used).
+    3. Copy the generated Bash script and save it (e.g., `download_region.sh`).
+    4. Run in an empty directory to download tiles:
+         ```bash
+         mkdir my_region_osm && cd my_region_osm
+         chmod +x download_region.sh
+         ./download_region.sh
+         ```
+    5. Convert each `.osm` file to LZM with auto bbox extraction:
+         ```bash
+         for osm in *.osm; do python ../lzm_builder.py --osm "$osm" --bbox auto --verbose; done
+         ```
+
+See `lzm_builder/tools/README.md` for full details and examples.
+
 
 ### Test Coverage
 
