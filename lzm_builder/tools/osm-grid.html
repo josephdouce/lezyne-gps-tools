@@ -201,6 +201,8 @@
         <div class="map-container">
             <div id="map"></div>
             <button class="polygon-btn" id="polygonBtn" title="Toggle Polygon Mode">🛑</button>
+            <!-- GPX Mode button (opens file dialog) -->
+            <button class="polygon-btn" id="gpxBtn" title="GPX Mode" style="top: 130px;">🧭</button>
             <div class="info-window" id="infoWindow">
                 <h3>Grid Information</h3>
                 <div class="info-item">
@@ -225,13 +227,15 @@
                     <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
                     <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
                 </div>
-                <div class="column">
+                <div class="column" id="polyColumn" style="display:none;">
                     <h4>.poly Output</h4>
                     <textarea id="polyText" placeholder="Generated .poly content will appear here..."></textarea>
                     <button class="copy-btn" onclick="copyPoly()">Copy .poly to Clipboard</button>
                 </div>
             </div>
         </div>
+        <!-- Hidden file input for GPX upload -->
+        <input type="file" id="gpxInput" accept=".gpx,.GPX" style="display:none" />
     </div>
 
     <!-- Detailed Instructions Section -->
@@ -353,6 +357,10 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
         let polygon = null;
         let vertices = [];
         let gridSquares = [];
+        // GPX mode state
+        let gpxMode = false;
+        let gpxLayer = null;
+        let gpxPoints = [];
 
         // Initialize map
         function initMap() {
@@ -380,6 +388,12 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
             // Polygon button event
             document.getElementById('polygonBtn').addEventListener('click', togglePolygonMode);
+            // GPX button event + file input
+            document.getElementById('gpxBtn').addEventListener('click', toggleGPXMode);
+            const gpxInput = document.getElementById('gpxInput');
+            if (gpxInput) {
+                gpxInput.addEventListener('change', handleGPXFileSelection);
+            }
         }
 
         // Toggle polygon mode
@@ -392,6 +406,13 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             if (polygonMode) {
                 btn.classList.add('active');
                 infoWindow.style.display = 'block';
+                // If GPX mode is active, turn it off
+                if (gpxMode) {
+                    gpxMode = false;
+                    const gpxBtn = document.getElementById('gpxBtn');
+                    if (gpxBtn) gpxBtn.classList.remove('active');
+                    clearGPX();
+                }
                 createOctagon();
             } else {
                 btn.classList.remove('active');
@@ -400,6 +421,194 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 clearGrid();
                 clearScript();
             }
+        }
+
+        // Create grid for GPX tracks
+        function updateGridForGPX() {
+            clearGrid();
+            clearWarnings();
+
+            if (!gpxPoints || gpxPoints.length === 0) return;
+
+            // Build bounding box around track
+            let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+            for (const p of gpxPoints) {
+                minLat = Math.min(minLat, p[0]);
+                maxLat = Math.max(maxLat, p[0]);
+                minLng = Math.min(minLng, p[1]);
+                maxLng = Math.max(maxLng, p[1]);
+            }
+
+            const degSize = 0.20;
+            const startLatIndex = Math.floor(minLat / degSize);
+            const endLatIndex = Math.ceil(maxLat / degSize);
+            const startLngIndex = Math.floor(minLng / degSize);
+            const endLngIndex = Math.ceil(maxLng / degSize);
+
+            const squares = [];
+            let squareCount = 0;
+
+            for (let latIdx = startLatIndex; latIdx < endLatIndex; latIdx++) {
+                const lat = latIdx * degSize;
+                for (let lngIdx = startLngIndex; lngIdx < endLngIndex; lngIdx++) {
+                    const lng = lngIdx * degSize;
+                    const squareBounds = [
+                        [lat, lng],
+                        [lat + degSize, lng],
+                        [lat + degSize, lng + degSize],
+                        [lat, lng + degSize]
+                    ];
+
+                    if (squareIntersectsTrack(squareBounds, gpxPoints)) {
+                        squares.push({
+                            bounds: squareBounds,
+                            minLat: parseFloat(lat.toFixed(5)),
+                            minLng: parseFloat(lng.toFixed(5)),
+                            maxLat: parseFloat((lat + degSize).toFixed(5)),
+                            maxLng: parseFloat((lng + degSize).toFixed(5))
+                        });
+                        squareCount++;
+                    }
+                }
+            }
+
+            if (squareCount > 100) {
+                showWarning(`Too many squares (${squareCount})! Maximum is 100. Please reduce track area.`);
+                return;
+            }
+
+            squares.forEach(square => {
+                const gridSquare = L.rectangle(square.bounds, {
+                    color: '#0066cc',
+                    weight: 1,
+                    fillColor: '#0066cc',
+                    fillOpacity: 0.1
+                }).addTo(map);
+                gridSquares.push(gridSquare);
+            });
+
+            // Update info and generate script
+            updateInfo(squares);
+            generateBashScript(squares);
+        }
+
+        // Toggle GPX mode - opens file dialog when turning on
+        // Note: gpxMode becomes true only after a GPX file has been successfully loaded.
+        function toggleGPXMode() {
+            const btn = document.getElementById('gpxBtn');
+            const infoWindow = document.getElementById('infoWindow');
+
+            if (!gpxMode) {
+                // If polygon mode active, turn it off
+                if (polygonMode) {
+                    togglePolygonMode();
+                }
+
+                // Open file picker; don't mark gpxMode true until a file is loaded
+                const gpxInput = document.getElementById('gpxInput');
+                if (gpxInput) {
+                    gpxInput.value = null; // allow reselecting same file
+                    gpxInput.click();
+                }
+            } else {
+                // Turn off GPX mode
+                gpxMode = false;
+                btn.classList.remove('active');
+                infoWindow.style.display = 'none';
+                clearGPX();
+                clearGrid();
+                clearScript();
+            }
+        }
+
+        // Handle file input selection
+        function handleGPXFileSelection(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (ev) {
+                try {
+                    const text = ev.target.result;
+                    parseAndDrawGPX(text);
+                } catch (err) {
+                    showWarning('Failed to load GPX file');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Very small GPX parser to extract track points (supports <trkpt> and <wpt>)
+        function parseAndDrawGPX(gpxText) {
+            // Clear previous GPX
+            clearGPX();
+
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(gpxText, 'application/xml');
+
+            // Prefer the first <trk> element and gather all <trkpt> from it (across segments)
+            const firstTrk = xml.querySelector('trk');
+            let pts = [];
+            if (firstTrk) {
+                pts = Array.from(firstTrk.querySelectorAll('trkpt'));
+            }
+
+            // Fallback to waypoints if no track present
+            if (pts.length === 0) {
+                pts = Array.from(xml.querySelectorAll('wpt'));
+            }
+
+            if (pts.length === 0) {
+                showWarning('No track points found in GPX (no <trk> or <wpt> elements)');
+                return;
+            }
+
+            gpxPoints = pts.map(pt => {
+                const lat = parseFloat(pt.getAttribute('lat'));
+                const lng = parseFloat(pt.getAttribute('lon'));
+                return [lat, lng];
+            }).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+
+            if (gpxPoints.length === 0) {
+                showWarning('No valid coordinates found in GPX');
+                return;
+            }
+
+            // Draw polyline
+            gpxLayer = L.polyline(gpxPoints, { color: '#ff0000', weight: 3, opacity: 0.9 }).addTo(map);
+
+            // Zoom to bounding box
+            const bounds = gpxLayer.getBounds();
+            map.fitBounds(bounds.pad(0.1));
+
+            // Mark GPX mode active and update UI
+            gpxMode = true;
+            const gpxBtn = document.getElementById('gpxBtn');
+            if (gpxBtn) gpxBtn.classList.add('active');
+            const infoWindow = document.getElementById('infoWindow');
+            if (infoWindow) infoWindow.style.display = 'block';
+
+            // Hide .poly output area for GPX mode
+            const polyColumn = document.getElementById('polyColumn');
+            if (polyColumn) polyColumn.style.display = 'none';
+
+            // Reset file input so same file can be selected later
+            const gpxInputElem = document.getElementById('gpxInput');
+            if (gpxInputElem) gpxInputElem.value = null;
+
+            // Create grid for GPX points
+            updateGridForGPX();
+        }
+
+        function clearGPX() {
+            if (gpxLayer) {
+                map.removeLayer(gpxLayer);
+                gpxLayer = null;
+            }
+            gpxPoints = [];
+            // Show poly column again (user might switch back to polygon mode later)
+            const polyColumn = document.getElementById('polyColumn');
+            if (polyColumn) polyColumn.style.display = 'block';
         }
 
         // Create octagon
@@ -655,68 +864,52 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             return y >= minLat && y <= maxLat && x >= minLng && x <= maxLng;
         }
 
+        // Geometry helpers (top-level so we can reuse for polygon & GPX track intersection)
+        function toXY(p) {
+            if (Array.isArray(p)) return { x: p[1], y: p[0] };
+            if (p && typeof p === 'object' && 'lat' in p && 'lng' in p) return { x: p.lng, y: p.lat };
+            return null;
+        }
+
+        function orientation(a, b, c) {
+            const val = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+            const EPS = 1e-12;
+            if (Math.abs(val) < EPS) return 0;
+            return val > 0 ? 1 : -1;
+        }
+
+        function onSegment(a, b, c) {
+            return (
+                Math.min(a.x, b.x) - 1e-12 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-12 &&
+                Math.min(a.y, b.y) - 1e-12 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-12
+            );
+        }
+
+        function segmentsIntersect(p1, p2, q1, q2) {
+            const A = toXY(p1);
+            const B = toXY(p2);
+            const C = toXY(q1);
+            const D = toXY(q2);
+            if (!A || !B || !C || !D) return false;
+
+            const o1 = orientation(A, B, C);
+            const o2 = orientation(A, B, D);
+            const o3 = orientation(C, D, A);
+            const o4 = orientation(C, D, B);
+
+            if (o1 !== o2 && o3 !== o4) return true;
+            if (o1 === 0 && onSegment(A, B, C)) return true;
+            if (o2 === 0 && onSegment(A, B, D)) return true;
+            if (o3 === 0 && onSegment(C, D, A)) return true;
+            if (o4 === 0 && onSegment(C, D, B)) return true;
+            return false;
+        }
+
         // Robust edge intersection test
         // Returns true if any edge of the square intersects any edge of the polygon
         function edgesIntersect(square, polygon) {
-            // Helper to normalize a point to {x, y} where x = lng, y = lat
-            function toXY(p) {
-                if (Array.isArray(p)) {
-                    return { x: p[1], y: p[0] };
-                }
-                if (p && typeof p === 'object' && 'lat' in p && 'lng' in p) {
-                    return { x: p.lng, y: p.lat };
-                }
-                return null;
-            }
-
-            // Orientation test
-            function orientation(a, b, c) {
-                // Returns 0 if colinear, 1 if clockwise, -1 if counterclockwise
-                const val = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-                const EPS = 1e-12;
-                if (Math.abs(val) < EPS) return 0;
-                return val > 0 ? 1 : -1;
-            }
-
-            // Check if point c lies on segment ab
-            function onSegment(a, b, c) {
-                return (
-                    Math.min(a.x, b.x) - 1e-12 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-12 &&
-                    Math.min(a.y, b.y) - 1e-12 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-12
-                );
-            }
-
-            // Segment intersection test between segment p1-p2 and q1-q2
-            function segmentsIntersect(p1, p2, q1, q2) {
-                const a = toXY(p1);
-                const b = toXY(p2);
-                const c = toXY(q1);
-                const d = toXY(q2);
-
-                if (!a || !b || !c || !d) return false;
-
-                const o1 = orientation(a, b, c);
-                const o2 = orientation(a, b, d);
-                const o3 = orientation(c, d, a);
-                const o4 = orientation(c, d, b);
-
-                // General case
-                if (o1 !== o2 && o3 !== o4) return true;
-
-                // Special Cases - colinear and overlapping
-                if (o1 === 0 && onSegment(a, b, c)) return true;
-                if (o2 === 0 && onSegment(a, b, d)) return true;
-                if (o3 === 0 && onSegment(c, d, a)) return true;
-                if (o4 === 0 && onSegment(c, d, b)) return true;
-
-                return false;
-            }
-
-            // Iterate over polygon edges and square edges
             const polyLen = polygon.length;
             if (polyLen < 2) return false;
-
-            // Square has 4 points
             for (let i = 0; i < polyLen; i++) {
                 const p1 = polygon[i];
                 const p2 = polygon[(i + 1) % polyLen];
@@ -724,10 +917,28 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 for (let j = 0; j < 4; j++) {
                     const s1 = square[j];
                     const s2 = square[(j + 1) % 4];
+                    if (segmentsIntersect(p1, p2, s1, s2)) return true;
+                }
+            }
+            return false;
+        }
 
-                    if (segmentsIntersect(p1, p2, s1, s2)) {
-                        return true;
-                    }
+        // Determine if a square intersects a GPX polyline/track
+        // Returns true if any GPX point falls inside the square or any GPX segment intersects square edges
+        function squareIntersectsTrack(squareBounds, trackPoints) {
+            // Check if any track point is inside the square
+            for (const pt of trackPoints) {
+                if (isPointInSquare([pt[0], pt[1]], squareBounds)) return true;
+            }
+
+            // Check for segment intersections between track segments and square edges
+            for (let i = 0; i < trackPoints.length - 1; i++) {
+                const p1 = trackPoints[i];
+                const p2 = trackPoints[i + 1];
+                for (let j = 0; j < 4; j++) {
+                    const s1 = squareBounds[j];
+                    const s2 = squareBounds[(j + 1) % 4];
+                    if (segmentsIntersect(p1, p2, s1, s2)) return true;
                 }
             }
 
@@ -736,8 +947,27 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
         // Update info window
         function updateInfo(squares) {
-            const area = calculatePolygonArea(vertices);
+            let area = 0;
             const squareCount = squares.length;
+
+            if (polygonMode && vertices.length >= 3) {
+                area = calculatePolygonArea(vertices);
+            } else if (gpxMode && gpxPoints.length > 0) {
+                // Approximate area using bounding box of GPX track
+                let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+                for (const p of gpxPoints) {
+                    minLat = Math.min(minLat, p[0]);
+                    maxLat = Math.max(maxLat, p[0]);
+                    minLng = Math.min(minLng, p[1]);
+                    maxLng = Math.max(maxLng, p[1]);
+                }
+                const heightDeg = Math.abs(maxLat - minLat);
+                const widthDeg = Math.abs(maxLng - minLng);
+                const meanLat = (minLat + maxLat) / 2;
+                const kmPerDegLat = 111; // approx
+                const kmPerDegLng = 111 * Math.cos(meanLat * Math.PI / 180);
+                area = heightDeg * widthDeg * kmPerDegLat * kmPerDegLng;
+            }
 
             // Calculate estimated download time (10 seconds download + 30 seconds wait per square)
             // Last square doesn't need wait time
@@ -755,21 +985,24 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 document.getElementById('downloadTime').textContent = hours + 'h ' + minutes + 'm';
             }
 
-            // Update polygon coordinates display
-            const polyName = "region"; // name that will appear at top of .poly
-
-            const polyText = [
-                polyName,
-                "1", // polygon section name (can be any label)
-                ...vertices.map(v => `${v.lng.toFixed(5)} ${v.lat.toFixed(5)}`),
-                "END",
-                "END"
-            ].join("\n");
-
-            // Populate the new poly textarea
+            // Update .poly output only when in polygon mode
+            const polyColumn = document.getElementById('polyColumn');
             const polyTextarea = document.getElementById('polyText');
-            if (polyTextarea) {
-                polyTextarea.value = polyText;
+            if (polygonMode && vertices.length >= 3) {
+                const polyName = "region"; // name that will appear at top of .poly
+                const polyText = [
+                    polyName,
+                    "1", // polygon section name (can be any label)
+                    ...vertices.map(v => `${v.lng.toFixed(5)} ${v.lat.toFixed(5)}`),
+                    "END",
+                    "END"
+                ].join("\n");
+                if (polyTextarea) polyTextarea.value = polyText;
+                if (polyColumn) polyColumn.style.display = 'block';
+            } else {
+                // Hide or clear poly output when not in polygon mode
+                if (polyTextarea) polyTextarea.value = '';
+                if (polyColumn) polyColumn.style.display = 'none';
             }
 
         }
