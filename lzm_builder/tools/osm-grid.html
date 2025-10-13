@@ -1129,6 +1129,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 return;
             }
 
+            const urlBase = 'http://overpass-api.de/api/interpreter';
+            const urlParamTemplate = '[out:xml][timeout:60];(way[highway~"^({highwayFilter})$"]({minLat},{minLng},{maxLat},{maxLng});>;);out;';
             const highwayFilter = 'motorway|motorway_link|trunk|primary|secondary|tertiary|trunk_link|tertiary_link|unclassified|residential|living_street|bus_guideway|escape|raceway|road|busway|corridor|rest_area|path|track|cycleway|pedestrian|footway|bridleway|steps|service|turning_circle|turning_loop';
 
             // Determine formatting precision: filenames use the slider step precision (min 2),
@@ -1149,13 +1151,30 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 const minLng = square.minLng.toFixed(queryDecimals);
                 const maxLat = square.maxLat.toFixed(queryDecimals);
                 const maxLng = square.maxLng.toFixed(queryDecimals);
-                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${minLat},${minLng},${maxLat},${maxLng});>;);out;'`;
+
+                const replacements = {
+                    '{highwayFilter}': highwayFilter,
+                    '{minLat}': minLat,
+                    '{minLng}': minLng,
+                    '{maxLat}': maxLat,
+                    '{maxLng}': maxLng
+                };
+
+                // Replace placeholders in the Overpass query template to generate the raw query
+                let param = urlParamTemplate;
+                for (const key in replacements) {
+                    param = param.replace(key, replacements[key]);
+                }
+
+                // Percent-encode the raw query so special characters do not break the shell command
+                const encodedParam = encodeURIComponent(param);
+                const url = urlBase + '?data=' + encodedParam;
 
                 // Add conditional download logic
                 script += `# Download ${filename}\n`;
                 script += `if [[ ! -f "${filename}" || $(stat -f%z "${filename}" 2>/dev/null || stat -c%s "${filename}" 2>/dev/null || echo 0) -le 200 ]]; then\n`;
                 script += `  echo "Downloading ${filename}..."\n`;
-                script += `  wget ${url} -O ${filename}\n`;
+                script += `  wget '${url}' -O "${filename}"\n`;
 
                 // Add sleep after download (except for the last command)
                 if (index < squares.length - 1) {
