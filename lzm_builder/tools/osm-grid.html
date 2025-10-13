@@ -150,40 +150,126 @@
         .vertex-marker {
             z-index: 1000;
         }
+
+        /* Two-column layout for script and .poly output */
+        .two-column {
+            display: flex;
+            gap: 32px;
+            /* more space between columns */
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+
+        .two-column .column {
+            flex: 1;
+            min-width: 0;
+            /* prevent overflow in flex children */
+            padding: 8px;
+            /* inner padding so content isn't flush */
+            box-sizing: border-box;
+        }
+
+        #polyText {
+            width: 100%;
+            height: 300px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            resize: vertical;
+            background-color: #f8f8f8;
+        }
+
+        /* Grid-size slider (hidden unless polygon or GPX mode active) */
+        .slider-container {
+            margin-top: 10px;
+            text-align: center;
+            display: none;
+            /* toggled from JS */
+            gap: 10px;
+            align-items: center;
+        }
+
+        .slider-label {
+            font-size: 14px;
+            margin-right: 8px;
+            color: #333;
+        }
+
+        #gridSizeSlider {
+            width: 220px;
+            max-width: 60%;
+            height: 6px;
+            vertical-align: middle;
+        }
+
+        @media (max-width: 900px) {
+            .two-column {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <h1>OSM Grid Downloader</h1>
-        <p class="description">Use the map below to generate a bash script to download 25km squares of OSM Highway data
-            from Overpass. <a href="#detailed-instructions"
-                style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See detailed instructions below</a>
+        <p class="description">Use the map below to generate a bash script to download OSM Highway data in tiled
+            boxes. You can choose the box size using the slider (0.05°–0.30°, default 0.20°). The tool supports two
+            modes: <strong>Polygon Mode</strong> (draw an editable octagon and generate a tiled grid) and
+            <strong>GPX Mode</strong> (🧭 load a GPX track and compute all grid boxes that intersect that track).
+            GPX Mode uses only the first <code>&lt;trk&gt;</code> element in a file and draws the track in red. <br />
+            <a href="#detailed-instructions" style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See
+                detailed instructions below</a>
         </p>
 
         <div class="map-container">
             <div id="map"></div>
             <button class="polygon-btn" id="polygonBtn" title="Toggle Polygon Mode">🛑</button>
+            <!-- GPX Mode button (opens file dialog) -->
+            <button class="polygon-btn" id="gpxBtn" title="GPX Mode" style="top: 130px;">🧭</button>
             <div class="info-window" id="infoWindow">
                 <h3>Grid Information</h3>
                 <div class="info-item">
                     <strong>Total Area:</strong> <span id="totalArea">0 km²</span>
                 </div>
                 <div class="info-item">
-                    <strong>25km Squares:</strong> <span id="squareCount">0</span>
+                    <strong>Boxes:</strong> <span id="squareCount">0</span>
+                </div>
+                <div class="info-item">
+                    <strong>Box Size:</strong> <span id="boxSize">0.20°</span>
                 </div>
                 <div class="info-item">
                     <strong>Est. Download Time:</strong> <span id="downloadTime">0 min</span>
                 </div>
+                <!-- removed poly display from info window; poly output moved below script area -->
                 <div id="warnings"></div>
+            </div>
+            <div class="slider-container" id="gridSizeContainer" style="display:none;">
+                <label class="slider-label" for="gridSizeSlider">Box size: <strong
+                        id="gridSizeValue">0.20°</strong></label>
+                <input type="range" id="gridSizeSlider" min="0.05" max="0.30" step="0.05" value="0.20" />
             </div>
         </div>
 
         <div class="script-container">
-            <h3>Generated Bash Script</h3>
-            <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
-            <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
+            <h3>Generated Outputs</h3>
+            <div class="two-column">
+                <div class="column">
+                    <h4>Generated Bash Script</h4>
+                    <textarea id="bashScript" placeholder="Generated bash script will appear here..."></textarea>
+                    <button class="copy-btn" onclick="copyScript()">Copy Script to Clipboard</button>
+                </div>
+                <div class="column" id="polyColumn" style="display:none;">
+                    <h4>.poly Output</h4>
+                    <textarea id="polyText" placeholder="Generated .poly content will appear here..."></textarea>
+                    <button class="copy-btn" onclick="copyPoly()">Copy .poly to Clipboard</button>
+                </div>
+            </div>
         </div>
+        <!-- Hidden file input for GPX upload -->
+        <input type="file" id="gpxInput" accept=".gpx,.GPX" style="display:none" />
     </div>
 
     <!-- Detailed Instructions Section -->
@@ -194,10 +280,9 @@
         <h3 style="color: #333; margin-top: 30px;">🎯 What This Tool Does</h3>
         <p style="line-height: 1.6; color: #666; margin-bottom: 20px;">
             This tool generates a comprehensive download strategy for creating offline maps of large regions (countries,
-            states, provinces).
-            It divides your selected area into a grid of 25km × 25km squares and creates a bash script to download
-            OpenStreetMap highway data
-            for each square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
+            states, provinces). It divides your selected area into a grid of boxes with a configurable cell size
+            (0.05°–0.30°, default 0.20°) and creates a bash script to download OpenStreetMap highway data for each
+            square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
         </p>
 
         <h3 style="color: #333; margin-top: 30px;">🚀 Complete Workflow</h3>
@@ -215,13 +300,23 @@
         </div>
 
         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #007acc;">GPX Mode</h4>
+            <p style="line-height: 1.6;">Click the compass button (🧭) to open a GPX file. The tool will use the first
+                &lt;trk&gt; element in the GPX and draw it on the map. It then computes all grid boxes (using the
+                selected cell size) that intersect the track and generates the bash script to download those boxes from
+                the Overpass API. The GPX track is displayed in red and is not editable.</p>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h4 style="margin-top: 0; color: #007acc;">Step 2: Download OSM Data</h4>
             <pre style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto;"><code># Create and enter download directory
 mkdir my_region_osm && cd my_region_osm
 
+# Use vi or nano to create the script file
+
 # Make script executable and run
-chmod +x ../download_region.sh
-../download_region.sh</code></pre>
+chmod +x download_region.sh
+./download_region.sh</code></pre>
 
             <p style="margin-top: 15px; line-height: 1.6;"><strong>Why 30-second delays?</strong> The Overpass API has
                 rate limits to prevent server overload.
@@ -259,13 +354,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
             <h4 style="margin-top: 0; color: #856404;">Broken/Incomplete Downloads</h4>
             <p style="line-height: 1.6; color: #856404; margin-bottom: 10px;">If you suspect some OSM files are broken
-                or incomplete:</p>
-            <pre style="background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 3px; margin: 10px 0;"><code># Find files smaller than 200 bytes (likely failed downloads)
-find . -name "*.osm" -size -200c
+                or incomplete, just re-run the download script and normally it will fix the issues.</p>
 
-# Delete small/broken files and re-run download script
-find . -name "*.osm" -size -200c -delete
-./download_region.sh</code></pre>
         </div>
 
         <div
@@ -274,23 +364,26 @@ find . -name "*.osm" -size -200c -delete
             <ul style="line-height: 1.6; color: #0c5460;">
                 <li><strong>Rural areas:</strong> 50-200 KB per OSM file</li>
                 <li><strong>Urban areas:</strong> 500KB-2MB per OSM file</li>
-                <li><strong>Final LZM files:</strong> 5-50 KB each</li>
+                <li><strong>Final LZM files:</strong> 5-200 KB each</li>
                 <li><strong>Empty areas:</strong> ~1KB (just XML structure)</li>
             </ul>
         </div>
 
         <h3 style="color: #333; margin-top: 30px;">📊 Real-World Example</h3>
         <p style="line-height: 1.6; color: #666; margin-bottom: 15px;">
-            <strong>Belgium Coverage:</strong> 30,500 km² → 73 grid squares → 40 minutes download time → 17 minutes LZM
+            <strong>Belgium Coverage:</strong> 30,500 km² → 73 grid boxes → 40 minutes download time → 2 ~ 3 minutes LZM
             conversion → Complete offline coverage
+            <br />
+            <strong>Luxembourg Coverage:</strong> 2,586 km² → 12 grid boxes → 10 minutes download time → 1 ~ 2 minutes
+            LZM conversion → Complete offline coverage
         </p>
 
         <div
             style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
             <p style="line-height: 1.6; color: #155724; margin: 0;"><strong>💡 Pro Tip:</strong>
                 For very large regions, consider breaking them into smaller polygons to manage download times and reduce
-                the risk of interruption.
-                Each polygon can be processed independently and the resulting LZM files combined on your device.</p>
+                the risk of interruption. Each polygon can be processed independently and the resulting LZM files
+                combined on your device.</p>
         </div>
     </div>
 
@@ -304,6 +397,13 @@ find . -name "*.osm" -size -200c -delete
         let polygon = null;
         let vertices = [];
         let gridSquares = [];
+        // Grid cell size in degrees (adjustable via slider)
+        let gridSizeDeg = 0.20;
+        // GPX mode state
+        let gpxMode = false;
+        let gpxLayer = null;
+        let gpxPoints = [];
+        let maxSquareCount = 200;
 
         // Initialize map
         function initMap() {
@@ -331,6 +431,34 @@ find . -name "*.osm" -size -200c -delete
 
             // Polygon button event
             document.getElementById('polygonBtn').addEventListener('click', togglePolygonMode);
+            // GPX button event + file input
+            document.getElementById('gpxBtn').addEventListener('click', toggleGPXMode);
+            const gpxInput = document.getElementById('gpxInput');
+            if (gpxInput) {
+                gpxInput.addEventListener('change', handleGPXFileSelection);
+            }
+
+            // Grid size slider wiring
+            const gridSlider = document.getElementById('gridSizeSlider');
+            const gridValue = document.getElementById('gridSizeValue');
+            if (gridSlider) {
+                // initialize UI to the default
+                gridSlider.value = gridSizeDeg;
+                if (gridValue) gridValue.textContent = gridSizeDeg.toFixed(2) + '°';
+
+                gridSlider.addEventListener('input', function (e) {
+                    const val = parseFloat(e.target.value);
+                    if (!Number.isFinite(val)) return;
+                    gridSizeDeg = val;
+                    if (gridValue) gridValue.textContent = gridSizeDeg.toFixed(2) + '°';
+                    // live update grid / script
+                    if (polygonMode) updateGrid();
+                    else if (gpxMode) updateGridForGPX();
+                });
+            }
+
+            // Make sure the slider is hidden unless a mode is active
+            updateGridSizeControlVisibility();
         }
 
         // Toggle polygon mode
@@ -343,6 +471,13 @@ find . -name "*.osm" -size -200c -delete
             if (polygonMode) {
                 btn.classList.add('active');
                 infoWindow.style.display = 'block';
+                // If GPX mode is active, turn it off
+                if (gpxMode) {
+                    gpxMode = false;
+                    const gpxBtn = document.getElementById('gpxBtn');
+                    if (gpxBtn) gpxBtn.classList.remove('active');
+                    clearGPX();
+                }
                 createOctagon();
             } else {
                 btn.classList.remove('active');
@@ -351,6 +486,201 @@ find . -name "*.osm" -size -200c -delete
                 clearGrid();
                 clearScript();
             }
+            // Show or hide the grid-size slider depending on active mode(s)
+            updateGridSizeControlVisibility();
+        }
+
+        // Create grid for GPX tracks
+        function updateGridForGPX() {
+            clearGrid();
+            clearWarnings();
+
+            if (!gpxPoints || gpxPoints.length === 0) return;
+
+            // Build bounding box around track
+            let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+            for (const p of gpxPoints) {
+                minLat = Math.min(minLat, p[0]);
+                maxLat = Math.max(maxLat, p[0]);
+                minLng = Math.min(minLng, p[1]);
+                maxLng = Math.max(maxLng, p[1]);
+            }
+
+            const degSize = gridSizeDeg;
+            const startLatIndex = Math.floor(minLat / degSize);
+            const endLatIndex = Math.ceil(maxLat / degSize);
+            const startLngIndex = Math.floor(minLng / degSize);
+            const endLngIndex = Math.ceil(maxLng / degSize);
+
+            const squares = [];
+            let squareCount = 0;
+
+            for (let latIdx = startLatIndex; latIdx < endLatIndex; latIdx++) {
+                const lat = latIdx * degSize;
+                for (let lngIdx = startLngIndex; lngIdx < endLngIndex; lngIdx++) {
+                    const lng = lngIdx * degSize;
+                    const squareBounds = [
+                        [lat, lng],
+                        [lat + degSize, lng],
+                        [lat + degSize, lng + degSize],
+                        [lat, lng + degSize]
+                    ];
+
+                    if (squareIntersectsTrack(squareBounds, gpxPoints)) {
+                        squares.push({
+                            bounds: squareBounds,
+                            minLat: parseFloat(lat.toFixed(5)),
+                            minLng: parseFloat(lng.toFixed(5)),
+                            maxLat: parseFloat((lat + degSize).toFixed(5)),
+                            maxLng: parseFloat((lng + degSize).toFixed(5))
+                        });
+                        squareCount++;
+                    }
+                }
+            }
+
+            if (squareCount > maxSquareCount) {
+                showWarning(`Too many squares (${squareCount}) for box size ${degSize.toFixed(2)}°! Maximum is ${maxSquareCount}. Please reduce track area or increase box size.`);
+                return;
+            }
+
+            squares.forEach(square => {
+                const gridSquare = L.rectangle(square.bounds, {
+                    color: '#0066cc',
+                    weight: 1,
+                    fillColor: '#0066cc',
+                    fillOpacity: 0.1
+                }).addTo(map);
+                gridSquares.push(gridSquare);
+            });
+
+            // Update info and generate script
+            updateInfo(squares);
+            generateBashScript(squares);
+        }
+
+        // Toggle GPX mode - opens file dialog when turning on
+        // Note: gpxMode becomes true only after a GPX file has been successfully loaded.
+        function toggleGPXMode() {
+            const btn = document.getElementById('gpxBtn');
+            const infoWindow = document.getElementById('infoWindow');
+
+            if (!gpxMode) {
+                // If polygon mode active, turn it off
+                if (polygonMode) {
+                    togglePolygonMode();
+                }
+
+                // Open file picker; don't mark gpxMode true until a file is loaded
+                const gpxInput = document.getElementById('gpxInput');
+                if (gpxInput) {
+                    gpxInput.value = null; // allow reselecting same file
+                    gpxInput.click();
+                }
+            } else {
+                // Turn off GPX mode
+                gpxMode = false;
+                btn.classList.remove('active');
+                infoWindow.style.display = 'none';
+                clearGPX();
+                clearGrid();
+                clearScript();
+            }
+            updateGridSizeControlVisibility();
+        }
+
+        // Handle file input selection
+        function handleGPXFileSelection(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (ev) {
+                try {
+                    const text = ev.target.result;
+                    parseAndDrawGPX(text);
+                } catch (err) {
+                    showWarning('Failed to load GPX file');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Very small GPX parser to extract track points (supports <trkpt> and <wpt>)
+        function parseAndDrawGPX(gpxText) {
+            // Clear previous GPX
+            clearGPX();
+
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(gpxText, 'application/xml');
+
+            // Prefer the first <trk> element and gather all <trkpt> from it (across segments)
+            const firstTrk = xml.querySelector('trk');
+            let pts = [];
+            if (firstTrk) {
+                pts = Array.from(firstTrk.querySelectorAll('trkpt'));
+            }
+
+            // Fallback to waypoints if no track present
+            if (pts.length === 0) {
+                pts = Array.from(xml.querySelectorAll('wpt'));
+            }
+
+            if (pts.length === 0) {
+                showWarning('No track points found in GPX (no <trk> or <wpt> elements)');
+                return;
+            }
+
+            gpxPoints = pts.map(pt => {
+                const lat = parseFloat(pt.getAttribute('lat'));
+                const lng = parseFloat(pt.getAttribute('lon'));
+                return [lat, lng];
+            }).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+
+            if (gpxPoints.length === 0) {
+                showWarning('No valid coordinates found in GPX');
+                return;
+            }
+
+            // Draw polyline
+            gpxLayer = L.polyline(gpxPoints, { color: '#ff0000', weight: 3, opacity: 0.9 }).addTo(map);
+
+            // Zoom to bounding box
+            const bounds = gpxLayer.getBounds();
+            map.fitBounds(bounds.pad(0.1));
+
+            // Mark GPX mode active and update UI
+            gpxMode = true;
+            const gpxBtn = document.getElementById('gpxBtn');
+            if (gpxBtn) gpxBtn.classList.add('active');
+            const infoWindow = document.getElementById('infoWindow');
+            if (infoWindow) infoWindow.style.display = 'block';
+
+            // Show the grid-size slider now that GPX mode is active
+            updateGridSizeControlVisibility();
+
+            // Hide .poly output area for GPX mode
+            const polyColumn = document.getElementById('polyColumn');
+            if (polyColumn) polyColumn.style.display = 'none';
+
+            // Reset file input so same file can be selected later
+            const gpxInputElem = document.getElementById('gpxInput');
+            if (gpxInputElem) gpxInputElem.value = null;
+
+            // Create grid for GPX points
+            updateGridForGPX();
+        }
+
+        function clearGPX() {
+            if (gpxLayer) {
+                map.removeLayer(gpxLayer);
+                gpxLayer = null;
+            }
+            gpxPoints = [];
+            // Show poly column again (user might switch back to polygon mode later)
+            const polyColumn = document.getElementById('polyColumn');
+            if (polyColumn) polyColumn.style.display = 'block';
+            updateGridSizeControlVisibility();
         }
 
         // Create octagon
@@ -490,30 +820,39 @@ find . -name "*.osm" -size -200c -delete
             const minLng = bounds.getWest();
             const maxLng = bounds.getEast();
 
-            // Calculate 25km in degrees (approximate)
-            const kmToDegree = 25 / 111; // roughly 25km in latitude degrees
+            // Grid step in degrees: use user-selected boxes (lat × lon)
+            const degSize = gridSizeDeg;
+
+            // Use index-based loops to avoid floating-point accumulation issues
+            const startLatIndex = Math.floor(minLat / degSize);
+            const endLatIndex = Math.ceil(maxLat / degSize);
+            const startLngIndex = Math.floor(minLng / degSize);
+            const endLngIndex = Math.ceil(maxLng / degSize);
 
             // Create grid
             const squares = [];
             let squareCount = 0;
 
-            for (let lat = Math.floor(minLat / kmToDegree) * kmToDegree; lat < maxLat; lat += kmToDegree) {
-                for (let lng = Math.floor(minLng / kmToDegree) * kmToDegree; lng < maxLng; lng += kmToDegree) {
+            for (let latIdx = startLatIndex; latIdx < endLatIndex; latIdx++) {
+                const lat = latIdx * degSize;
+                for (let lngIdx = startLngIndex; lngIdx < endLngIndex; lngIdx++) {
+                    const lng = lngIdx * degSize;
                     const squareBounds = [
                         [lat, lng],
-                        [lat + kmToDegree, lng],
-                        [lat + kmToDegree, lng + kmToDegree],
-                        [lat, lng + kmToDegree]
+                        [lat + degSize, lng],
+                        [lat + degSize, lng + degSize],
+                        [lat, lng + degSize]
                     ];
 
                     // Check if square intersects with polygon
                     if (squareIntersectsPolygon(squareBounds, vertices)) {
                         squares.push({
                             bounds: squareBounds,
-                            minLat: parseFloat(lat.toFixed(2)),
-                            minLng: parseFloat(lng.toFixed(2)),
-                            maxLat: parseFloat((lat + kmToDegree).toFixed(2)),
-                            maxLng: parseFloat((lng + kmToDegree).toFixed(2))
+                            // store coordinates with reasonable precision for filenames / queries
+                            minLat: parseFloat(lat.toFixed(5)),
+                            minLng: parseFloat(lng.toFixed(5)),
+                            maxLat: parseFloat((lat + degSize).toFixed(5)),
+                            maxLng: parseFloat((lng + degSize).toFixed(5))
                         });
                         squareCount++;
                     }
@@ -521,8 +860,8 @@ find . -name "*.osm" -size -200c -delete
             }
 
             // Check square limit
-            if (squareCount > 100) {
-                showWarning(`Too many squares (${squareCount})! Maximum is 100. Please reduce polygon size.`);
+            if (squareCount > maxSquareCount) {
+                showWarning(`Too many squares (${squareCount}) for box size ${degSize.toFixed(2)}°! Maximum is ${maxSquareCount}. Please reduce polygon size or increase box size.`);
                 return;
             }
 
@@ -597,16 +936,126 @@ find . -name "*.osm" -size -200c -delete
             return y >= minLat && y <= maxLat && x >= minLng && x <= maxLng;
         }
 
-        // Simple edge intersection test
+        // Geometry helpers (top-level so we can reuse for polygon & GPX track intersection)
+        function toXY(p) {
+            if (Array.isArray(p)) return { x: p[1], y: p[0] };
+            if (p && typeof p === 'object' && 'lat' in p && 'lng' in p) return { x: p.lng, y: p.lat };
+            return null;
+        }
+
+        function orientation(a, b, c) {
+            const val = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+            const EPS = 1e-12;
+            if (Math.abs(val) < EPS) return 0;
+            return val > 0 ? 1 : -1;
+        }
+
+        function onSegment(a, b, c) {
+            return (
+                Math.min(a.x, b.x) - 1e-12 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-12 &&
+                Math.min(a.y, b.y) - 1e-12 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-12
+            );
+        }
+
+        function segmentsIntersect(p1, p2, q1, q2) {
+            const A = toXY(p1);
+            const B = toXY(p2);
+            const C = toXY(q1);
+            const D = toXY(q2);
+            if (!A || !B || !C || !D) return false;
+
+            const o1 = orientation(A, B, C);
+            const o2 = orientation(A, B, D);
+            const o3 = orientation(C, D, A);
+            const o4 = orientation(C, D, B);
+
+            if (o1 !== o2 && o3 !== o4) return true;
+            if (o1 === 0 && onSegment(A, B, C)) return true;
+            if (o2 === 0 && onSegment(A, B, D)) return true;
+            if (o3 === 0 && onSegment(C, D, A)) return true;
+            if (o4 === 0 && onSegment(C, D, B)) return true;
+            return false;
+        }
+
+        // Robust edge intersection test
+        // Returns true if any edge of the square intersects any edge of the polygon
         function edgesIntersect(square, polygon) {
-            // This is a simplified version - in production you'd want a more robust implementation
-            return false; // For now, we rely on vertex tests above
+            const polyLen = polygon.length;
+            if (polyLen < 2) return false;
+            for (let i = 0; i < polyLen; i++) {
+                const p1 = polygon[i];
+                const p2 = polygon[(i + 1) % polyLen];
+
+                for (let j = 0; j < 4; j++) {
+                    const s1 = square[j];
+                    const s2 = square[(j + 1) % 4];
+                    if (segmentsIntersect(p1, p2, s1, s2)) return true;
+                }
+            }
+            return false;
+        }
+
+        // Determine if a square intersects a GPX polyline/track
+        // Returns true if any GPX point falls inside the square or any GPX segment intersects square edges
+        function squareIntersectsTrack(squareBounds, trackPoints) {
+            // Check if any track point is inside the square
+            for (const pt of trackPoints) {
+                if (isPointInSquare([pt[0], pt[1]], squareBounds)) return true;
+            }
+
+            // Check for segment intersections between track segments and square edges
+            for (let i = 0; i < trackPoints.length - 1; i++) {
+                const p1 = trackPoints[i];
+                const p2 = trackPoints[i + 1];
+                for (let j = 0; j < 4; j++) {
+                    const s1 = squareBounds[j];
+                    const s2 = squareBounds[(j + 1) % 4];
+                    if (segmentsIntersect(p1, p2, s1, s2)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Return number of decimal places defined by the slider step (used for formatting)
+        function getSliderStepDecimalPlaces() {
+            const slider = document.getElementById('gridSizeSlider');
+            if (!slider) return 2;
+            const step = slider.step || '0.05';
+            if (step.indexOf('.') === -1) return 0;
+            return step.split('.')[1].length;
+        }
+
+        // Show or hide the grid-size control depending on whether polygon or GPX mode is active
+        function updateGridSizeControlVisibility() {
+            const container = document.getElementById('gridSizeContainer');
+            if (!container) return;
+            container.style.display = (polygonMode || gpxMode) ? 'block' : 'none';
         }
 
         // Update info window
         function updateInfo(squares) {
-            const area = calculatePolygonArea(vertices);
+            let area = 0;
             const squareCount = squares.length;
+
+            if (polygonMode && vertices.length >= 3) {
+                area = calculatePolygonArea(vertices);
+            } else if (gpxMode && gpxPoints.length > 0) {
+                // Approximate area using bounding box of GPX track
+                let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+                for (const p of gpxPoints) {
+                    minLat = Math.min(minLat, p[0]);
+                    maxLat = Math.max(maxLat, p[0]);
+                    minLng = Math.min(minLng, p[1]);
+                    maxLng = Math.max(maxLng, p[1]);
+                }
+                const heightDeg = Math.abs(maxLat - minLat);
+                const widthDeg = Math.abs(maxLng - minLng);
+                const meanLat = (minLat + maxLat) / 2;
+                const kmPerDegLat = 111; // approx
+                const kmPerDegLng = 111 * Math.cos(meanLat * Math.PI / 180);
+                area = heightDeg * widthDeg * kmPerDegLat * kmPerDegLng;
+            }
 
             // Calculate estimated download time (10 seconds download + 30 seconds wait per square)
             // Last square doesn't need wait time
@@ -616,6 +1065,13 @@ find . -name "*.osm" -size -200c -delete
             document.getElementById('totalArea').textContent = area.toFixed(2) + ' km²';
             document.getElementById('squareCount').textContent = squareCount;
 
+            // Update box size display (respect slider step precision)
+            const boxSizeEl = document.getElementById('boxSize');
+            if (boxSizeEl) {
+                const displayDecimals = Math.max(2, getSliderStepDecimalPlaces());
+                boxSizeEl.textContent = gridSizeDeg.toFixed(displayDecimals) + '°';
+            }
+
             if (downloadTimeMinutes < 60) {
                 document.getElementById('downloadTime').textContent = downloadTimeMinutes + ' min';
             } else {
@@ -623,6 +1079,27 @@ find . -name "*.osm" -size -200c -delete
                 const minutes = downloadTimeMinutes % 60;
                 document.getElementById('downloadTime').textContent = hours + 'h ' + minutes + 'm';
             }
+
+            // Update .poly output only when in polygon mode
+            const polyColumn = document.getElementById('polyColumn');
+            const polyTextarea = document.getElementById('polyText');
+            if (polygonMode && vertices.length >= 3) {
+                const polyName = "region"; // name that will appear at top of .poly
+                const polyText = [
+                    polyName,
+                    "1", // polygon section name (can be any label)
+                    ...vertices.map(v => `${v.lng.toFixed(5)} ${v.lat.toFixed(5)}`),
+                    "END",
+                    "END"
+                ].join("\n");
+                if (polyTextarea) polyTextarea.value = polyText;
+                if (polyColumn) polyColumn.style.display = 'block';
+            } else {
+                // Hide or clear poly output when not in polygon mode
+                if (polyTextarea) polyTextarea.value = '';
+                if (polyColumn) polyColumn.style.display = 'none';
+            }
+
         }
 
         // Calculate polygon area (rough approximation)
@@ -654,14 +1131,25 @@ find . -name "*.osm" -size -200c -delete
 
             const highwayFilter = 'motorway|motorway_link|trunk|primary|secondary|tertiary|trunk_link|tertiary_link|unclassified|residential|living_street|bus_guideway|escape|raceway|road|busway|corridor|rest_area|path|track|cycleway|pedestrian|footway|bridleway|steps|service|turning_circle|turning_loop';
 
+            // Determine formatting precision: filenames use the slider step precision (min 2),
+            // Overpass query uses higher precision for bbox values to avoid clipped areas.
+            const nameDecimals = Math.max(2, getSliderStepDecimalPlaces());
+            const queryDecimals = 5;
+
             let script = '#!/bin/bash\n\n';
             script += '# OSM Highway Data Download Script\n';
             script += '# Generated by OSM Grid Downloader\n';
+            script += `# Grid cell size: ${gridSizeDeg.toFixed(nameDecimals)} degrees\n`;
             script += '# Resumes downloads - skips existing files > 200 bytes\n\n';
 
             squares.forEach((square, index) => {
-                const filename = `osm_${square.minLat}_${square.minLng}_${square.maxLat}_${square.maxLng}_${index + 1}_${squares.length}_grid.osm`;
-                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${square.minLat},${square.minLng},${square.maxLat},${square.maxLng});>;);out;'`;
+                // Use configured precision for filenames for readability and higher precision for the Overpass query
+                const filename = `osm_${square.minLat.toFixed(nameDecimals)}_${square.minLng.toFixed(nameDecimals)}_${square.maxLat.toFixed(nameDecimals)}_${square.maxLng.toFixed(nameDecimals)}_${index + 1}_${squares.length}_grid.osm`;
+                const minLat = square.minLat.toFixed(queryDecimals);
+                const minLng = square.minLng.toFixed(queryDecimals);
+                const maxLat = square.maxLat.toFixed(queryDecimals);
+                const maxLng = square.maxLng.toFixed(queryDecimals);
+                const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${minLat},${minLng},${maxLat},${maxLng});>;);out;'`;
 
                 // Add conditional download logic
                 script += `# Download ${filename}\n`;
@@ -730,6 +1218,13 @@ find . -name "*.osm" -size -200c -delete
             document.getElementById('squareCount').textContent = '0';
             document.getElementById('downloadTime').textContent = '0 min';
             clearWarnings();
+            const polyTextarea = document.getElementById('polyText');
+            if (polyTextarea) polyTextarea.value = '';
+            const boxSizeEl = document.getElementById('boxSize');
+            if (boxSizeEl) {
+                const displayDecimals = Math.max(2, getSliderStepDecimalPlaces());
+                boxSizeEl.textContent = gridSizeDeg.toFixed(displayDecimals) + '°';
+            }
         }
 
         // Copy script to clipboard
@@ -743,6 +1238,21 @@ find . -name "*.osm" -size -200c -delete
                 alert('Script copied to clipboard!');
             } catch (err) {
                 alert('Failed to copy script. Please select and copy manually.');
+            }
+        }
+
+        // Copy .poly content to clipboard
+        function copyPoly() {
+            const textarea = document.getElementById('polyText');
+            if (!textarea) return;
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+
+            try {
+                document.execCommand('copy');
+                alert('.poly copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy .poly. Please select and copy manually.');
             }
         }
 

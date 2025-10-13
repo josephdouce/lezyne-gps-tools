@@ -353,7 +353,7 @@ def point_to_line_distance(point: Coordinate, line_start: Coordinate, line_end: 
 def filename_from_bbox(bbox: BoundingBox, prefix="mf", suffix=".lzm") -> str
 def pluck_bbox_from_filename(filename: str) -> BoundingBox
 def script_dir() -> str
-def extract_smaller_pbf_from_larger_pbf(input_pbf: str, output_pbf: str, bbox: BoundingBox) -> bool
+def extract_smaller_osm_from_larger_osm(input_osm: str, output_osm: str, bbox: BoundingBox) -> bool
 ```
 
 ---
@@ -454,8 +454,9 @@ Total tests:  3
 Passed:       3
 Failed:       0
 
-🎉 ALL TESTS PASSED!
 ```
+
+
 
 ### Test Coverage
 
@@ -486,6 +487,71 @@ All tests include comprehensive sanity checking:
 - Displays tile directory structure  
 - Analyzes polyline data
 - Validates file integrity
+
+### `tools/osm-grid.html` — Interactive OSM Grid Downloader
+
+Purpose: visually plan an area (polygon) or load a GPX track and emit a resumable Bash script to download OpenStreetMap highway data in grid tiles. The tool now supports a configurable cell size (0.05°–0.30°, default 0.20°) so you can pick the degree-size of each tile.
+
+Key features:
+
+- Tile size and indexing
+    - Configurable cell size: 0.05°–0.30° (latitude × longitude). Default is 0.20°.
+    - Indexing uses integer grid indices to avoid floating point accumulation:
+        - startLatIndex = floor(minLat / 0.20)
+        - endLatIndex   = ceil(maxLat  / 0.20)
+        - startLngIndex = floor(minLng / 0.20)
+        - endLngIndex   = ceil(maxLng  / 0.20)
+
+- Modes
+    - Polygon Mode:
+        - Editable octagon (8 draggable vertices). The UI enforces convex polygons and warns on non-convex shapes.
+        - Emits a `.poly` block (longitude latitude order, 5 decimal places) when a valid polygon is present.
+    - GPX Mode:
+        - Loads a GPX file and uses only the first `<trk>` element (falls back to `<wpt>` if no track). The track is drawn in red and the `.poly` output is hidden.
+    - Computes all grid tiles (at the selected size) that intersect the track using point-in-square and segment-intersection tests.
+
+- Selection & safety
+    - A tile is selected if any tile corner lies inside the polygon/track, or any polygon vertex lies inside the tile, or any tile edge intersects any polygon/track segment.
+    - Maximum selectable tiles: 100 (UI prevents generating larger batches to avoid Overpass abuse).
+
+- Generated Bash script
+    - Filenames: `osm_{minLat}_{minLng}_{maxLat}_{maxLng}_{index}_{total}_grid.osm` (coordinates rounded to 2 decimal places for filenames and Overpass bboxes).
+    - Resume logic: the script skips existing files larger than 200 bytes using `stat -f%z` (macOS) or `stat -c%s` (Linux) with a safe fallback.
+    - Rate-limiting: the script enforces a 30s sleep between downloads; the UI estimates total time assuming ~10s download + 30s wait per tile.
+    - Overpass filter: the query filters common highway tags (motorway, trunk, primary, secondary, tertiary, residential, cycleway, footway, service, etc.).
+
+- `.poly` output (Polygon Mode)
+    - Format (longitude latitude order):
+        ```
+        region
+        1
+        {lon} {lat}
+        {lon} {lat}
+        ...
+        END
+        END
+        ```
+
+- Area & time estimates
+    - Polygon area uses a planar shoelace approximation converted to km² (~111 km/deg).
+    - GPX area uses the GPX bounding box with mean-latitude cosine scaling for longitude km conversion.
+    - Download time estimate = squares*10 + (squares-1)*30 seconds.
+
+Quick workflow:
+
+1. Open `lzm_builder/tools/osm-grid.html` in a browser.
+2. Use Polygon Mode (🛑) to draw/adjust the octagon or GPX Mode (🧭) to load a track.
+3. Copy/save the generated script (e.g. `download_region.sh`), `chmod +x` and run it in a fresh directory to download `.osm` tiles.
+4. Convert `.osm` files to LZM using auto-bbox mode:
+     ```bash
+     for osm in *.osm; do python ../lzm_builder.py --osm "$osm" --bbox auto --verbose; done
+     ```
+
+Notes:
+
+- Grid tiles are degree-based (default 0.20°) and not equal-area — longitudinal distance varies with latitude.
+- The tool enforces conservative limits and waits to be a good Overpass citizen; adjust your workflow accordingly.
+
 
 ---
 

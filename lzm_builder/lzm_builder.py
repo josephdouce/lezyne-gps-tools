@@ -21,7 +21,7 @@ from services.grid_builder import GridBuilder
 from services.lzm_writer import LZMWriter
 
 # Import utilities
-from utils.geographic import pluck_bbox_from_filename, filename_from_bbox, extract_smaller_pbf_from_larger_pbf
+from utils.geographic import pluck_bbox_from_filename, filename_from_bbox, extract_smaller_osm_from_larger_osm
 
 
 class LZMBuilder:
@@ -118,8 +118,8 @@ class LZMBuilder:
         """
         extracted_pbf_file = filename_from_bbox(bbox, prefix="extracted", suffix=".osm.pbf", include_path=True)
 
-        with self._logger.phase(f"Extracting smaller PBF to {extracted_pbf_file}"):
-            success = extract_smaller_pbf_from_larger_pbf(osm_path, extracted_pbf_file, bbox)
+        with self._logger.phase(f"Extracting smaller OSM/PBF to {extracted_pbf_file}"):
+            success = extract_smaller_osm_from_larger_osm(osm_path, extracted_pbf_file, bbox)
             if not success:
                 raise RuntimeError("Failed to extract smaller PBF")
             

@@ -7,6 +7,7 @@ calculations, bounding box operations, and polyline simplification.
 
 import math
 import os
+import shutil
 import re
 import subprocess
 from typing import List, Optional, Tuple, TYPE_CHECKING
@@ -184,18 +185,70 @@ def pluck_bbox_from_filename(filename: str) -> 'BoundingBox':
     return BoundingBox(south, west, north, east)
 
 
-def extract_smaller_pbf_from_larger_pbf(input_pbf: str, output_pbf: str, bbox: 'BoundingBox') -> bool:
-    """Extract a smaller PBF file from a larger one using osmium."""
+def extract_smaller_osm_from_larger_osm(input_osm: str, output_osm: str, bbox: 'BoundingBox') -> bool:
+    """Extract a smaller OSM file (either .osm or .pbf) from a larger one.
+
+    This function is intentionally agnostic about the underlying OSM file
+    format. It will attempt to use any available CLI tool on the system to
+    perform a bbox extraction (preference order: `osmium`, `osmosis`,
+    `osmconvert`). The output filename's extension determines the desired
+    format (e.g. `.osm`, `.osm.pbf`, `.pbf`).
+    """
     try:
+        # Osmium (preferred) accepts bbox as "west,south,east,north".
         bbox_str = f"{bbox.west},{bbox.south},{bbox.east},{bbox.north}"
-        cmd = [
-            "osmium", "extract",
-            "--bbox", bbox_str,
-            "--output", output_pbf,
-            input_pbf
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
+
+        # Try osmium first if available
+        if shutil.which("osmium"):
+            cmd = [
+                "osmium", "extract",
+                "--bbox", bbox_str,
+                "--output", output_osm,
+                input_osm
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+
+        # Fallback to osmosis if installed
+        if shutil.which("osmosis"):
+            # osmosis uses top/left/right/bottom argument names
+            top = bbox.north
+            left = bbox.west
+            right = bbox.east
+            bottom = bbox.south
+
+            # Select appropriate read/write operators based on file extensions
+            in_lower = input_osm.lower()
+            out_lower = output_osm.lower()
+
+            read_op = "--read-pbf" if in_lower.endswith(".pbf") else "--read-xml"
+            write_op = "--write-pbf" if out_lower.endswith(".pbf") or out_lower.endswith(".osm.pbf") else "--write-xml"
+
+            cmd = [
+                "osmosis",
+                read_op, f"file={input_osm}",
+                "bounding-box",
+                f"top={top}", f"left={left}", f"right={right}", f"bottom={bottom}",
+                write_op, f"file={output_osm}"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+
+        # Final fallback: osmconvert (if present)
+        if shutil.which("osmconvert"):
+            cmd = [
+                "osmconvert",
+                input_osm,
+                f"-b={bbox.west},{bbox.south},{bbox.east},{bbox.north}",
+                f"-o={output_osm}"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+
+        # No supported tool found or all attempts failed
+        return False
     except Exception:
         return False
