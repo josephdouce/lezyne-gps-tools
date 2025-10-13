@@ -36,12 +36,12 @@ This tool is useful for:
 
 File: `lzm_builder/tools/osm-grid.html`
 
-Purpose: visually plan an area of interest (polygon) or load a GPX track and emit a resumable bash script to download OpenStreetMap highway data in fixed 0.20° × 0.20° tiles from the Overpass API.
+Purpose: visually plan an area of interest (polygon) or load a GPX track and emit a resumable bash script to download OpenStreetMap highway data in grid tiles. The tool supports a configurable cell size (0.05°–0.30°, default 0.20°).
 
 Key behavior and notes:
 
 - Tile size and indexing
-    - Fixed cell size: 0.20° × 0.20° (latitude × longitude).
+    - Configurable cell size: 0.05°–0.30° (latitude × longitude). Default is 0.20°.
     - Computed using integer indices to avoid accumulation errors:
         - startLatIndex = floor(minLat / 0.20)
         - endLatIndex   = ceil(maxLat / 0.20)
@@ -63,7 +63,7 @@ Key behavior and notes:
             ```
     - GPX Mode:
         - Loads a GPX file and uses only the first `<trk>` element (falls back to `<wpt>` if no track). The track is drawn in red. GPX Mode hides the `.poly` output area.
-        - Computes every 0.20° tile that intersects the track (point-in-square + segment intersection tests).
+    - Computes every grid tile (at the selected size) that intersects the track (point-in-square + segment intersection tests).
 
 - Intersection selection
     - A tile is selected if any tile corner is inside the polygon/track, or any polygon vertex is inside the tile, or if any tile edge intersects any polygon/track segment.
@@ -98,5 +98,5 @@ Key behavior and notes:
          ```
 
 Notes and caveats
-    - 0.20° degree boxes are not equal-area — longitude degrees compress toward the poles. Use the tool for planning and convenience (equal-area grids require DGGS/S2/H3-style approaches).
+    - Degree-based grid boxes are not equal-area — longitude degrees compress toward the poles. Use the tool for planning and convenience (equal-area grids require DGGS/S2/H3-style approaches). Default cell size is 0.20°.
     - The tool intentionally enforces conservative limits and waits to be a good Overpass citizen.

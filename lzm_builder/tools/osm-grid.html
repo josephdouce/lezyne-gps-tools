@@ -181,6 +181,29 @@
             background-color: #f8f8f8;
         }
 
+        /* Grid-size slider (hidden unless polygon or GPX mode active) */
+        .slider-container {
+            margin-top: 10px;
+            text-align: center;
+            display: none;
+            /* toggled from JS */
+            gap: 10px;
+            align-items: center;
+        }
+
+        .slider-label {
+            font-size: 14px;
+            margin-right: 8px;
+            color: #333;
+        }
+
+        #gridSizeSlider {
+            width: 220px;
+            max-width: 60%;
+            height: 6px;
+            vertical-align: middle;
+        }
+
         @media (max-width: 900px) {
             .two-column {
                 flex-direction: column;
@@ -192,10 +215,10 @@
 <body>
     <div class="container">
         <h1>OSM Grid Downloader</h1>
-        <p class="description">Use the map below to generate a bash script to download 0.20° × 0.20° degree boxes of OSM
-            Highway data from Overpass. The tool supports two modes:
-            <strong>Polygon Mode</strong> (draw an editable octagon and generate a tiled grid) and
-            <strong>GPX Mode</strong> (🧭 load a GPX track and compute all 0.20° boxes that intersect that track).
+        <p class="description">Use the map below to generate a bash script to download OSM Highway data in tiled
+            boxes. You can choose the box size using the slider (0.05°–0.30°, default 0.20°). The tool supports two
+            modes: <strong>Polygon Mode</strong> (draw an editable octagon and generate a tiled grid) and
+            <strong>GPX Mode</strong> (🧭 load a GPX track and compute all grid boxes that intersect that track).
             GPX Mode uses only the first <code>&lt;trk&gt;</code> element in a file and draws the track in red. <br />
             <a href="#detailed-instructions" style="color: #007acc; text-decoration: none; font-weight: bold;">📖 See
                 detailed instructions below</a>
@@ -212,13 +235,21 @@
                     <strong>Total Area:</strong> <span id="totalArea">0 km²</span>
                 </div>
                 <div class="info-item">
-                    <strong>0.20° Boxes:</strong> <span id="squareCount">0</span>
+                    <strong>Boxes:</strong> <span id="squareCount">0</span>
+                </div>
+                <div class="info-item">
+                    <strong>Box Size:</strong> <span id="boxSize">0.20°</span>
                 </div>
                 <div class="info-item">
                     <strong>Est. Download Time:</strong> <span id="downloadTime">0 min</span>
                 </div>
                 <!-- removed poly display from info window; poly output moved below script area -->
                 <div id="warnings"></div>
+            </div>
+            <div class="slider-container" id="gridSizeContainer" style="display:none;">
+                <label class="slider-label" for="gridSizeSlider">Box size: <strong
+                        id="gridSizeValue">0.20°</strong></label>
+                <input type="range" id="gridSizeSlider" min="0.05" max="0.30" step="0.05" value="0.20" />
             </div>
         </div>
 
@@ -249,11 +280,9 @@
         <h3 style="color: #333; margin-top: 30px;">🎯 What This Tool Does</h3>
         <p style="line-height: 1.6; color: #666; margin-bottom: 20px;">
             This tool generates a comprehensive download strategy for creating offline maps of large regions (countries,
-            states, provinces).
-            It divides your selected area into a grid of 0.20° × 0.20° degree boxes and creates a bash script to
-            download
-            OpenStreetMap highway data
-            for each square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
+            states, provinces). It divides your selected area into a grid of boxes with a configurable cell size
+            (0.05°–0.30°, default 0.20°) and creates a bash script to download OpenStreetMap highway data for each
+            square from the Overpass API. This data can then be converted into Lezyne LZM offline map files.
         </p>
 
         <h3 style="color: #333; margin-top: 30px;">🚀 Complete Workflow</h3>
@@ -273,9 +302,9 @@
         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h4 style="margin-top: 0; color: #007acc;">GPX Mode</h4>
             <p style="line-height: 1.6;">Click the compass button (🧭) to open a GPX file. The tool will use the first
-                &lt;trk&gt; element in the GPX and draw it on the map. It then computes all 0.20° boxes intersecting the
-                track and generates the bash script to download those boxes from the Overpass API. The GPX track is
-                displayed in red and is not editable.</p>
+                &lt;trk&gt; element in the GPX and draw it on the map. It then computes all grid boxes (using the
+                selected cell size) that intersect the track and generates the bash script to download those boxes from
+                the Overpass API. The GPX track is displayed in red and is not editable.</p>
         </div>
 
         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -368,10 +397,13 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
         let polygon = null;
         let vertices = [];
         let gridSquares = [];
+        // Grid cell size in degrees (adjustable via slider)
+        let gridSizeDeg = 0.20;
         // GPX mode state
         let gpxMode = false;
         let gpxLayer = null;
         let gpxPoints = [];
+        let maxSquareCount = 200;
 
         // Initialize map
         function initMap() {
@@ -405,6 +437,28 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             if (gpxInput) {
                 gpxInput.addEventListener('change', handleGPXFileSelection);
             }
+
+            // Grid size slider wiring
+            const gridSlider = document.getElementById('gridSizeSlider');
+            const gridValue = document.getElementById('gridSizeValue');
+            if (gridSlider) {
+                // initialize UI to the default
+                gridSlider.value = gridSizeDeg;
+                if (gridValue) gridValue.textContent = gridSizeDeg.toFixed(2) + '°';
+
+                gridSlider.addEventListener('input', function (e) {
+                    const val = parseFloat(e.target.value);
+                    if (!Number.isFinite(val)) return;
+                    gridSizeDeg = val;
+                    if (gridValue) gridValue.textContent = gridSizeDeg.toFixed(2) + '°';
+                    // live update grid / script
+                    if (polygonMode) updateGrid();
+                    else if (gpxMode) updateGridForGPX();
+                });
+            }
+
+            // Make sure the slider is hidden unless a mode is active
+            updateGridSizeControlVisibility();
         }
 
         // Toggle polygon mode
@@ -432,6 +486,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 clearGrid();
                 clearScript();
             }
+            // Show or hide the grid-size slider depending on active mode(s)
+            updateGridSizeControlVisibility();
         }
 
         // Create grid for GPX tracks
@@ -450,7 +506,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 maxLng = Math.max(maxLng, p[1]);
             }
 
-            const degSize = 0.20;
+            const degSize = gridSizeDeg;
             const startLatIndex = Math.floor(minLat / degSize);
             const endLatIndex = Math.ceil(maxLat / degSize);
             const startLngIndex = Math.floor(minLng / degSize);
@@ -483,8 +539,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 }
             }
 
-            if (squareCount > 100) {
-                showWarning(`Too many squares (${squareCount})! Maximum is 100. Please reduce track area.`);
+            if (squareCount > maxSquareCount) {
+                showWarning(`Too many squares (${squareCount}) for box size ${degSize.toFixed(2)}°! Maximum is ${maxSquareCount}. Please reduce track area or increase box size.`);
                 return;
             }
 
@@ -530,6 +586,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 clearGrid();
                 clearScript();
             }
+            updateGridSizeControlVisibility();
         }
 
         // Handle file input selection
@@ -599,6 +656,9 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             const infoWindow = document.getElementById('infoWindow');
             if (infoWindow) infoWindow.style.display = 'block';
 
+            // Show the grid-size slider now that GPX mode is active
+            updateGridSizeControlVisibility();
+
             // Hide .poly output area for GPX mode
             const polyColumn = document.getElementById('polyColumn');
             if (polyColumn) polyColumn.style.display = 'none';
@@ -620,6 +680,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             // Show poly column again (user might switch back to polygon mode later)
             const polyColumn = document.getElementById('polyColumn');
             if (polyColumn) polyColumn.style.display = 'block';
+            updateGridSizeControlVisibility();
         }
 
         // Create octagon
@@ -759,8 +820,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             const minLng = bounds.getWest();
             const maxLng = bounds.getEast();
 
-            // Grid step in degrees: use 0.20° boxes (lat × lon)
-            const degSize = 0.20;
+            // Grid step in degrees: use user-selected boxes (lat × lon)
+            const degSize = gridSizeDeg;
 
             // Use index-based loops to avoid floating-point accumulation issues
             const startLatIndex = Math.floor(minLat / degSize);
@@ -799,8 +860,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             }
 
             // Check square limit
-            if (squareCount > 100) {
-                showWarning(`Too many squares (${squareCount})! Maximum is 100. Please reduce polygon size.`);
+            if (squareCount > maxSquareCount) {
+                showWarning(`Too many squares (${squareCount}) for box size ${degSize.toFixed(2)}°! Maximum is ${maxSquareCount}. Please reduce polygon size or increase box size.`);
                 return;
             }
 
@@ -956,6 +1017,22 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             return false;
         }
 
+        // Return number of decimal places defined by the slider step (used for formatting)
+        function getSliderStepDecimalPlaces() {
+            const slider = document.getElementById('gridSizeSlider');
+            if (!slider) return 2;
+            const step = slider.step || '0.05';
+            if (step.indexOf('.') === -1) return 0;
+            return step.split('.')[1].length;
+        }
+
+        // Show or hide the grid-size control depending on whether polygon or GPX mode is active
+        function updateGridSizeControlVisibility() {
+            const container = document.getElementById('gridSizeContainer');
+            if (!container) return;
+            container.style.display = (polygonMode || gpxMode) ? 'block' : 'none';
+        }
+
         // Update info window
         function updateInfo(squares) {
             let area = 0;
@@ -987,6 +1064,13 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
             document.getElementById('totalArea').textContent = area.toFixed(2) + ' km²';
             document.getElementById('squareCount').textContent = squareCount;
+
+            // Update box size display (respect slider step precision)
+            const boxSizeEl = document.getElementById('boxSize');
+            if (boxSizeEl) {
+                const displayDecimals = Math.max(2, getSliderStepDecimalPlaces());
+                boxSizeEl.textContent = gridSizeDeg.toFixed(displayDecimals) + '°';
+            }
 
             if (downloadTimeMinutes < 60) {
                 document.getElementById('downloadTime').textContent = downloadTimeMinutes + ' min';
@@ -1047,18 +1131,24 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
             const highwayFilter = 'motorway|motorway_link|trunk|primary|secondary|tertiary|trunk_link|tertiary_link|unclassified|residential|living_street|bus_guideway|escape|raceway|road|busway|corridor|rest_area|path|track|cycleway|pedestrian|footway|bridleway|steps|service|turning_circle|turning_loop';
 
+            // Determine formatting precision: filenames use the slider step precision (min 2),
+            // Overpass query uses higher precision for bbox values to avoid clipped areas.
+            const nameDecimals = Math.max(2, getSliderStepDecimalPlaces());
+            const queryDecimals = 5;
+
             let script = '#!/bin/bash\n\n';
             script += '# OSM Highway Data Download Script\n';
             script += '# Generated by OSM Grid Downloader\n';
+            script += `# Grid cell size: ${gridSizeDeg.toFixed(nameDecimals)} degrees\n`;
             script += '# Resumes downloads - skips existing files > 200 bytes\n\n';
 
             squares.forEach((square, index) => {
-                // Use 2 decimal places in filenames and Overpass bbox (e.g. 50.40)
-                const filename = `osm_${square.minLat.toFixed(2)}_${square.minLng.toFixed(2)}_${square.maxLat.toFixed(2)}_${square.maxLng.toFixed(2)}_${index + 1}_${squares.length}_grid.osm`;
-                const minLat = square.minLat.toFixed(2);
-                const minLng = square.minLng.toFixed(2);
-                const maxLat = square.maxLat.toFixed(2);
-                const maxLng = square.maxLng.toFixed(2);
+                // Use configured precision for filenames for readability and higher precision for the Overpass query
+                const filename = `osm_${square.minLat.toFixed(nameDecimals)}_${square.minLng.toFixed(nameDecimals)}_${square.maxLat.toFixed(nameDecimals)}_${square.maxLng.toFixed(nameDecimals)}_${index + 1}_${squares.length}_grid.osm`;
+                const minLat = square.minLat.toFixed(queryDecimals);
+                const minLng = square.minLng.toFixed(queryDecimals);
+                const maxLat = square.maxLat.toFixed(queryDecimals);
+                const maxLng = square.maxLng.toFixed(queryDecimals);
                 const url = `'http://overpass-api.de/api/interpreter?data=[out:xml][timeout:60];(way[highway~\"^(${highwayFilter})$\"](${minLat},${minLng},${maxLat},${maxLng});>;);out;'`;
 
                 // Add conditional download logic
@@ -1130,6 +1220,11 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             clearWarnings();
             const polyTextarea = document.getElementById('polyText');
             if (polyTextarea) polyTextarea.value = '';
+            const boxSizeEl = document.getElementById('boxSize');
+            if (boxSizeEl) {
+                const displayDecimals = Math.max(2, getSliderStepDecimalPlaces());
+                boxSizeEl.textContent = gridSizeDeg.toFixed(displayDecimals) + '°';
+            }
         }
 
         // Copy script to clipboard

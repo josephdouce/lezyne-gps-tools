@@ -490,12 +490,12 @@ All tests include comprehensive sanity checking:
 
 ### `tools/osm-grid.html` — Interactive OSM Grid Downloader
 
-Purpose: visually plan an area (polygon) or load a GPX track and emit a resumable Bash script to download OpenStreetMap highway data in fixed 0.20° × 0.20° tiles from the Overpass API.
+Purpose: visually plan an area (polygon) or load a GPX track and emit a resumable Bash script to download OpenStreetMap highway data in grid tiles. The tool now supports a configurable cell size (0.05°–0.30°, default 0.20°) so you can pick the degree-size of each tile.
 
 Key features:
 
 - Tile size and indexing
-    - Fixed cell size: 0.20° × 0.20° (latitude × longitude).
+    - Configurable cell size: 0.05°–0.30° (latitude × longitude). Default is 0.20°.
     - Indexing uses integer grid indices to avoid floating point accumulation:
         - startLatIndex = floor(minLat / 0.20)
         - endLatIndex   = ceil(maxLat  / 0.20)
@@ -508,7 +508,7 @@ Key features:
         - Emits a `.poly` block (longitude latitude order, 5 decimal places) when a valid polygon is present.
     - GPX Mode:
         - Loads a GPX file and uses only the first `<trk>` element (falls back to `<wpt>` if no track). The track is drawn in red and the `.poly` output is hidden.
-        - Computes all 0.20° tiles that intersect the track using point-in-square and segment-intersection tests.
+    - Computes all grid tiles (at the selected size) that intersect the track using point-in-square and segment-intersection tests.
 
 - Selection & safety
     - A tile is selected if any tile corner lies inside the polygon/track, or any polygon vertex lies inside the tile, or any tile edge intersects any polygon/track segment.
@@ -549,7 +549,7 @@ Quick workflow:
 
 Notes:
 
-- 0.20° tiles are degree-based and not equal-area — longitudinal distance varies with latitude.
+- Grid tiles are degree-based (default 0.20°) and not equal-area — longitudinal distance varies with latitude.
 - The tool enforces conservative limits and waits to be a good Overpass citizen; adjust your workflow accordingly.
 
 
