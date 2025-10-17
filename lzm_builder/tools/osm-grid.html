@@ -829,6 +829,9 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             const startLngIndex = Math.floor(minLng / degSize);
             const endLngIndex = Math.ceil(maxLng / degSize);
 
+            // Sleep Amount in seconds between downloads
+            const sleepSeconds = 30;
+
             // Create grid
             const squares = [];
             let squareCount = 0;
@@ -1057,9 +1060,9 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 area = heightDeg * widthDeg * kmPerDegLat * kmPerDegLng;
             }
 
-            // Calculate estimated download time (10 seconds download + 30 seconds wait per square)
+            // Calculate estimated download time (10 seconds download + sleep seconds wait per square)
             // Last square doesn't need wait time
-            const downloadTimeSeconds = squareCount > 0 ? (squareCount * 10) + ((squareCount - 1) * 30) : 0;
+            const downloadTimeSeconds = squareCount > 0 ? (squareCount * 10) + ((squareCount - 1) * sleepSeconds) : 0;
             const downloadTimeMinutes = Math.round(downloadTimeSeconds / 60);
 
             document.getElementById('totalArea').textContent = area.toFixed(2) + ' km²';
@@ -1129,7 +1132,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
                 return;
             }
 
-            const urlBase = 'http://overpass-api.de/api/interpreter';
+            const urlBase = 'http://overpass-api.de/api/interpreter?data=';
             const urlParamTemplate = '[out:xml][timeout:60];(way[highway~"^({highwayFilter})$"]({minLat},{minLng},{maxLat},{maxLng});>;);out;';
             const highwayFilter = 'motorway|motorway_link|trunk|primary|secondary|tertiary|trunk_link|tertiary_link|unclassified|residential|living_street|bus_guideway|escape|raceway|road|busway|corridor|rest_area|path|track|cycleway|pedestrian|footway|bridleway|steps|service|turning_circle|turning_loop';
 
@@ -1168,7 +1171,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
                 // Percent-encode the raw query so special characters do not break the shell command
                 const encodedParam = encodeURIComponent(param);
-                const url = urlBase + '?data=' + encodedParam;
+                const url = urlBase + encodedParam;
 
                 // Add conditional download logic
                 script += `# Download ${filename}\n`;
@@ -1178,7 +1181,7 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
 
                 // Add sleep after download (except for the last command)
                 if (index < squares.length - 1) {
-                    script += `  sleep 30\n`;
+                    script += `  sleep ${sleepSeconds}\n`;
                 }
 
                 script += `else\n`;
