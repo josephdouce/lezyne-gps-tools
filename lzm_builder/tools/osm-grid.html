@@ -404,6 +404,8 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
         let gpxLayer = null;
         let gpxPoints = [];
         let maxSquareCount = 200;
+        // Sleep amount in seconds between downloads
+        const sleepSeconds = 30;
 
         // Initialize map
         function initMap() {
@@ -828,9 +830,6 @@ cp *.lzm /media/LEZYNE/Maps/       # Linux</code></pre>
             const endLatIndex = Math.ceil(maxLat / degSize);
             const startLngIndex = Math.floor(minLng / degSize);
             const endLngIndex = Math.ceil(maxLng / degSize);
-
-            // Sleep Amount in seconds between downloads
-            const sleepSeconds = 30;
 
             // Create grid
             const squares = [];
